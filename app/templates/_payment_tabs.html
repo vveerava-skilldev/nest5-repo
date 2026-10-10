@@ -1,0 +1,9 @@
+<nav class="tabs no-print" aria-label="Payments">
+  <a href="/payments/maintenance{% if period and payments_tab == 'maintenance' %}?period_id={{ period.id }}{% endif %}" class="tab {% if payments_tab == 'maintenance' %}active{% endif %}"{% if payments_tab == 'maintenance' %} aria-current="page"{% endif %}>Maintenance</a>
+  <a href="/payments/corpus" class="tab {% if payments_tab == 'corpus' %}active{% endif %}"{% if payments_tab == 'corpus' %} aria-current="page"{% endif %}>Corpus</a>
+  <a href="/payments/projects" class="tab {% if payments_tab == 'projects' %}active{% endif %}"{% if payments_tab == 'projects' %} aria-current="page"{% endif %}>Projects</a>
+  <a href="/payments/expenses" class="tab {% if payments_tab == 'expenses' %}active{% endif %}"{% if payments_tab == 'expenses' %} aria-current="page"{% endif %}>{% if is_admin(request) %}Owner expenses{% else %}Expenses{% endif %}</a>
+  {% if is_admin(request) or request.state.building_view|default(False) %}
+  <a href="/payments/building" class="tab tab-aside">View payments →</a>
+  {% endif %}
+</nav>

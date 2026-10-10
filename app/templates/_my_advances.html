@@ -1,0 +1,40 @@
+{# expects `my_advances` from balances.owner_advances #}
+<section class="card my-advances">
+  <div class="card-head">
+    <h3 style="margin:0">Expenses you paid — owed back to you</h3>
+    <span class="value-inline">₹{{ my_advances.owed }}</span>
+  </div>
+  {% if my_advances.per_flat|length > 1 %}
+  <p class="asset-meta">{% for r in my_advances.per_flat %}<span>Flat {{ r.flat.number }}: ₹{{ r.owed }}</span>{% endfor %}</p>
+  {% endif %}
+  {% if my_advances.unsettled or my_advances.settled %}
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Date</th><th>Expense</th><th>Flat</th><th>Amount</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for e in my_advances.unsettled %}
+      <tr>
+        <td>{{ e.expense_date|format_date }}</td>
+        <td>{{ e.description }} <small style="color:var(--muted)">{{ e.category }}</small></td>
+        <td>{{ e.paid_by_flat.number }}</td>
+        <td>₹{{ e.amount }}</td>
+        <td><span class="badge warn">Waiting to be settled</span></td>
+      </tr>
+    {% endfor %}
+    {% for e in my_advances.settled %}
+      <tr>
+        <td>{{ e.expense_date|format_date }}</td>
+        <td>{{ e.description }} <small style="color:var(--muted)">{{ e.category }}</small></td>
+        <td>{{ e.paid_by_flat.number }}</td>
+        <td>₹{{ e.amount }}</td>
+        <td><span class="badge ok">Settled{% if e.settlement and e.settlement.settled_on %} {{ e.settlement.settled_on|format_date }}{% endif %}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="settlement-hint">Total still owed back: ₹{{ my_advances.owed }} · already settled: ₹{{ my_advances.settled_total }}. Record a new one on <a href="/payments/expenses">Payments › Expenses</a>.</p>
+  {% else %}
+  <p style="color:var(--muted)">Nothing owed back to you. Paid a common expense yourself? Record it on <a href="/payments/expenses">Payments › Expenses</a>.</p>
+  {% endif %}
+</section>

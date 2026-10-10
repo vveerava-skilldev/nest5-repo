@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Projects — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Building projects</h2>
+{% include "_flash.html" %}
+<p style="color:var(--muted)">Project costs are split equally across 5 flats. {% if is_admin(request) %}Per-flat payments: <a href="/payments/projects">Payments › Projects</a>.{% else %}Your shares: <a href="/payments/projects">Payments › Projects</a>.{% endif %}</p>
+<div class="grid">
+  <div class="card stat"><div class="label">Total project cost</div><div class="value">₹{{ building.cost }}</div></div>
+  <div class="card stat"><div class="label">Collected</div><div class="value">₹{{ building.collected }}</div></div>
+  <div class="card stat"><div class="label">Pending</div><div class="value">₹{{ building.pending }}</div></div>
+  <div class="card stat"><div class="label">Progress</div><div class="value">{{ building.progress_pct }}%</div><progress max="100" value="{{ building.progress_pct }}"></progress></div>
+</div>
+{% if is_admin(request) %}
+<div class="card no-print">
+  <form method="post" action="/projects">
+    <div class="inline" style="flex-wrap:wrap;gap:0.5rem">
+      <input name="name" placeholder="Project name" required>
+      <input name="description" placeholder="Description">
+      <input name="total_cost" type="number" min="1" placeholder="Total cost" required>
+      <label>Start <input name="start_date" type="date"></label>
+      <label>Due <input name="due_date" type="date"></label>
+      <button type="submit">Create project</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+<div class="card">
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Name</th><th>Total</th><th>Per flat</th><th>Collected</th><th>Pending</th><th>Flats paid</th><th>Progress</th><th></th></tr></thead>
+    <tbody>
+    {% for row in project_rows %}
+      {% set p = row.project %}{% set t = row.totals %}
+      <tr>
+        <td>{{ p.name }}</td>
+        <td>₹{{ p.total_cost }}</td>
+        <td>₹{{ p.share_per_flat }}</td>
+        <td>₹{{ t.collected }}</td>
+        <td>₹{{ t.pending }}</td>
+        <td>{{ t.paid_flats }} / {{ t.flats }}{% if t.part_flats %} ({{ t.part_flats }} part){% endif %}</td>
+        <td><div class="progress"><span style="width:{{ t.progress_pct }}%"></span></div> {{ t.progress_pct }}%</td>
+        <td><a href="/projects/{{ p.id }}">{{ 'View payments →' if is_admin(request) else 'Details →' }}</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" style="color:var(--muted)">No projects yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

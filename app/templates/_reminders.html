@@ -1,0 +1,32 @@
+{% if reminders %}
+<div class="card reminders-panel">
+  <h3 style="margin-top:0">{% if reminder_title %}{{ reminder_title }}{% else %}Your dues{% endif %}
+    {% if reminders.overdue %}<span class="badge bad">{{ reminders.overdue }} overdue</span>{% endif %}
+    {% if reminders.due_soon %}<span class="badge warn">{{ reminders.due_soon }} due within 7 days</span>{% endif %}
+  </h3>
+  {% if reminders['items'] %}
+  <table>
+    <thead><tr><th>Flat</th><th>What</th><th>Details</th><th>Amount</th><th>Due</th></tr></thead>
+    <tbody>
+    {% for r in reminders['items'] %}
+      <tr class="reminder-{{ r.status }}">
+        <td>{{ r.flat.number }}</td>
+        <td>{{ r.kind }}</td>
+        <td><a href="{{ r.link }}">{{ r.label }}</a></td>
+        <td>₹{{ r.amount }}</td>
+        <td>
+          {% if r.status == 'overdue' %}<span class="badge bad">Overdue{% if r.due_date %} · {{ r.due_date|format_date }}{% endif %}</span>
+          {% elif r.status == 'due_soon' %}<span class="badge warn">Due {{ r.due_date|format_date }}</span>
+          {% elif r.due_date %}{{ r.due_date|format_date }}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><td colspan="3"><strong>Total outstanding</strong></td><td colspan="2"><strong>₹{{ reminders.total }}</strong></td></tr></tfoot>
+  </table>
+  {% else %}
+  <p style="margin:0"><span class="badge ok">✓</span> Nothing outstanding — thank you!</p>
+  {% endif %}
+</div>
+{% endif %}

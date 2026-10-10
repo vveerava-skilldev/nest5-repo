@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "_owner_marks.html" import owner_marks with context %}
+{% block title %}Maintenance fees — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Payments</h2>
+{% include "_payment_tabs.html" %}
+<p style="color:var(--muted)">Maintenance fees: monthly ₹{{ maintenance_fee }} per flat — separate from corpus fund payments.</p>
+{% set base_path = '/payments/maintenance' %}
+{% include "_period_nav.html" %}
+{% include "_flash.html" %}
+{% if not is_admin(request) and request.state.user_flats|default([]) %}
+{% set my_flats = request.state.user_flats %}
+<div class="card no-print owner-form">
+  <h3 style="margin-top:0">Record my maintenance payment</h3>
+  <form method="post" action="/owner/maintenance" class="expense-form">
+    <div class="expense-form-grid">
+      {% if my_flats|length > 1 %}
+      <label>Flat
+        <select name="flat_id" class="owner-flat-select">{% for fid, fnum in my_flats %}<option value="{{ fid }}">Flat {{ fnum }}</option>{% endfor %}</select>
+      </label>
+      {% else %}
+      <input type="hidden" name="flat_id" class="owner-flat-select" value="{{ my_flats[0][0] }}">
+      <label>Flat<input value="Flat {{ my_flats[0][1] }}" disabled></label>
+      {% endif %}
+      <label>Month
+        <select name="period_id" class="owner-period-select">
+          {% for p in nav.periods %}<option value="{{ p.id }}" data-fee="{{ owner_fees.get(p.id, maintenance_fee) }}" {% if period and p.id == period.id %}selected{% endif %}>{{ p.year }}-{{ '%02d'|format(p.month) }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Payment date<input type="date" name="paid_on" value="{{ today|iso_date }}" required></label>
+      <label>Amount (₹)<input type="number" name="amount" min="1" class="owner-amount" value="{{ owner_fees.get(period.id, maintenance_fee) if period else maintenance_fee }}" required></label>
+      <label>Mode
+        <select name="payment_mode">{% for m in payment_modes %}<option>{{ m }}</option>{% endfor %}</select>
+      </label>
+      <label>Note<input type="text" name="payment_note" placeholder="UPI ref / remarks"></label>
+      {% set _paid_key = my_flats[0][0] ~ ':' ~ (period.id if period else '') %}
+      {% set _paid_on = owner_paid.get(_paid_key) %}
+      <div class="owner-submit-wrap">
+        <button type="submit" class="owner-submit"{% if _paid_on is not none %} disabled{% endif %}>Submit payment</button>
+        <span class="badge ok owner-paid-status"{% if _paid_on is none %} hidden{% endif %}>Already paid{% if _paid_on %} on {{ _paid_on }}{% endif %}</span>
+      </div>
+    </div>
+  </form>
+</div>
+<script>
+(function () {
+  const sel = document.querySelector(".owner-period-select");
+  const amt = document.querySelector(".owner-amount");
+  if (sel && amt) sel.addEventListener("change", () => { amt.value = sel.selectedOptions[0].dataset.fee; });
+
+  const paid = {{ owner_paid|tojson }};
+  const flat = document.querySelector(".owner-flat-select");
+  const btn = document.querySelector(".owner-submit");
+  const status = document.querySelector(".owner-paid-status");
+  function refreshPaid() {
+    if (!flat || !sel || !btn || !status) return;
+    const on = paid[flat.value + ":" + sel.value];
+    const isPaid = on !== undefined;
+    btn.disabled = isPaid;
+    status.hidden = !isPaid;
+    status.textContent = on ? "Already paid on " + on : "Already paid";
+  }
+  if (sel) sel.addEventListener("change", refreshPaid);
+  if (flat) flat.addEventListener("change", refreshPaid);
+  refreshPaid();
+})();
+</script>
+{% endif %}
+<div class="card">
+  <table>
+    <thead><tr><th>Flat</th><th>Owner</th><th>Amount</th><th>Status</th><th>Paid on</th><th>Note</th><th></th></tr></thead>
+    <tbody>
+    {% for mp in payments %}
+      <tr>
+        <td>{{ mp.flat.number }}</td>
+        <td>{{ mp.flat.contact_name or '—' }}{% if mp.flat.owner_notes %} <span class="badge warn" style="font-size:0.65rem">{{ mp.flat.owner_notes }}</span>{% endif %}</td>
+        <td>₹{{ mp.amount }}</td>
+        <td>{% if mp.is_paid %}<span class="badge ok">Paid</span>{% else %}<span class="badge warn">Pending</span>{% endif %}</td>
+        <td>{{ mp.paid_on|format_date }}</td>
+        <td>{% if mp.payment_mode and mp.is_paid %}{{ mp.payment_mode }} · {% endif %}{{ mp.payment_note or '—' }}
+          {% if mp.is_paid %}{{ owner_marks(mp, 'maintenance_payment', cancel_pending, '/payments/maintenance?period_id=' ~ mp.period_id) }}{% endif %}</td>
+        <td>
+          {% if not is_admin(request) %}
+          {% elif not mp.is_paid %}
+          <form method="post" action="/maintenance/{{ mp.id }}/pay" class="inline">
+            <input type="date" name="paid_on" required>
+            <input type="text" name="payment_note" placeholder="UPI / signature">
+            <button type="submit">Mark paid</button>
+          </form>
+          {% else %}
+          <form method="post" action="/maintenance/{{ mp.id }}/revert" class="inline" onsubmit="return confirm('Revert payment?')">
+            <button type="submit" class="secondary">Revert</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

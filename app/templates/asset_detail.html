@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% from "_asset_macros.html" import task_rows, asset_fields, frequency_fields with context %}
+{% block title %}{{ asset.name }} — Asset schedule — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>{{ asset.name }} <span class="badge">{{ asset.asset_type or 'Other' }}</span></h2>
+<p class="no-print"><a href="/schedule">← Asset schedule</a></p>
+{% include "_flash.html" %}
+<div class="grid">
+  <div class="card stat"><div class="label">Location</div><div class="value small">{{ asset.location or '—' }}</div></div>
+  <div class="card stat"><div class="label">Vendor / AMC contact</div><div class="value small">{{ asset.vendor_contact or '—' }}</div></div>
+  <div class="card stat"><div class="label">Installed</div><div class="value small">{{ asset.install_date|format_date }}</div></div>
+  <div class="card stat"><div class="label">Warranty / AMC expiry</div><div class="value small">{{ asset.warranty_expiry|format_date }}{% if asset.warranty_expiry and asset.warranty_expiry < today %} <span class="badge bad">Expired</span>{% endif %}</div></div>
+  <div class="card stat"><div class="label">Cost</div><div class="value small">{{ '₹' ~ asset.cost if asset.cost is not none else '—' }}</div></div>
+  <div class="card stat"><div class="label">Logged spend</div><div class="value small">₹{{ total_cost }}</div></div>
+</div>
+{% if asset.notes %}<p>{{ asset.notes }}</p>{% endif %}
+
+<div class="card">
+  <h3 style="margin-top:0">Recurring tasks</h3>
+  {% if tasks %}
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Task</th><th>Frequency</th><th>Last done</th><th>Next due</th><th>Status</th>{% if is_admin(request) %}<th class="no-print"></th>{% endif %}</tr></thead>
+    <tbody>{{ task_rows(tasks, today, back, frequencies) }}</tbody>
+  </table>
+  </div>
+  {% else %}
+  <p style="color:var(--muted)">No recurring tasks yet.</p>
+  {% endif %}
+  {% if is_admin(request) %}
+  <details class="no-print">
+    <summary>Add recurring task</summary>
+    <form method="post" action="/schedule" class="stack-form">
+      <input type="hidden" name="asset_id" value="{{ asset.id }}">
+      <input type="hidden" name="back" value="{{ back }}">
+      <label>Task <input name="task" placeholder="e.g. Monthly service" required></label>
+      {{ frequency_fields(frequencies) }}
+      <label>Last done <input type="date" name="last_done_on"></label>
+      <label>Next due <input type="date" name="next_due_on" placeholder="Optional"></label>
+      <label>Vendor <input name="vendor" value="{{ asset.vendor_contact or '' }}"></label>
+      <label>Notes <input name="notes" placeholder="Optional"></label>
+      <button type="submit">Add task</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+
+{% if is_admin(request) %}
+<div class="card no-print">
+  <h3 style="margin-top:0">Record a check / service</h3>
+  <form method="post" action="/assets/{{ asset.id }}/log" class="stack-form">
+    <input type="hidden" name="back" value="{{ back }}">
+    <label>For task
+      <select name="schedule_id">
+        <option value="">— General note (e.g. monthly notes) —</option>
+        {% for t, _ in tasks %}<option value="{{ t.id }}">{{ t.task }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Done on <input type="date" name="done_on" value="{{ today.isoformat() }}" required></label>
+    <label>Done by <input name="done_by" placeholder="e.g. AMC technician"></label>
+    <label>Cost ₹ <input name="cost" type="number" min="0" placeholder="Optional"></label>
+    <label>Notes <input name="notes" placeholder="What was checked / found"></label>
+    <button type="submit">Save log entry</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3 style="margin-top:0">Maintenance history</h3>
+  {% if logs %}
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Date</th><th>Task</th><th>Done by</th><th>Notes</th><th>Cost</th><th>Next due</th>{% if is_admin(request) %}<th class="no-print"></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for log in logs %}
+      <tr>
+        <td>{{ log.done_on|format_date }}</td>
+        <td>{{ log.task.task if log.task else 'Note' }}</td>
+        <td>{{ log.done_by or '—' }}</td>
+        <td>{{ log.notes or '—' }}</td>
+        <td>{{ '₹' ~ log.cost if log.cost is not none else '—' }}</td>
+        <td>{{ log.next_due_on|format_date }}</td>
+        {% if is_admin(request) %}
+        <td class="no-print">
+          <form method="post" action="/assets/logs/{{ log.id }}/delete" class="inline" onsubmit="return confirm('Remove this log entry?')">
+            <button type="submit" class="secondary">Remove</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p style="color:var(--muted)">Nothing logged yet.</p>
+  {% endif %}
+</div>
+
+{% if is_admin(request) %}
+<div class="card no-print">
+  <details>
+    <summary>Edit asset details</summary>
+    <form method="post" action="/assets/{{ asset.id }}/edit" class="stack-form">
+      {{ asset_fields(asset_types, asset) }}
+      <button type="submit">Save</button>
+    </form>
+  </details>
+  <form method="post" action="/assets/{{ asset.id }}/delete" style="margin-top:0.75rem" onsubmit="return confirm('Remove this asset and its tasks?')">
+    <button type="submit" class="danger">Delete asset</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

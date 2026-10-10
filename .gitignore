@@ -1,0 +1,16 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.db
+*.conflict.db
+*.conflict.pyc
+nest5.db
+.env
+.pytest_cache/
+instance/
+backups/
+db-backups/
+*initial-passwords*
+*.pem
+.DS_Store

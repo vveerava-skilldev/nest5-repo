@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Month rollover — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Month rollover</h2>
+<p style="color:var(--muted)">Close a month to lock closing balance and carry forward opening balance to the next month.</p>
+<div class="card">
+  <table>
+    <thead><tr><th>Period</th><th>Opening</th><th>Closing</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for p in periods %}
+      <tr>
+        <td>{{ p.year }}-{{ '%02d'|format(p.month) }}</td>
+        <td>₹{{ p.opening_fund_balance }}</td>
+        <td>{% if p.closing_fund_balance is not none %}₹{{ p.closing_fund_balance }}{% else %}—{% endif %}</td>
+        <td>{% if p.is_closed %}<span class="badge ok">Closed</span>{% else %}<span class="badge warn">Open</span>{% endif %}</td>
+        <td>
+          {% if not p.is_closed %}
+          <form method="post" action="/periods/{{ p.id }}/close" onsubmit="return confirm('Close this month?')">
+            <button type="submit">Close & carry forward</button>
+          </form>
+          {% else %}
+          <a href="/statements/{{ p.id }}">Statement</a>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

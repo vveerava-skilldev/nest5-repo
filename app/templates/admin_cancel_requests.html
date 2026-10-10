@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Cancel requests — Admin{% endblock %}
+{% block content %}
+<h2>Owner cancel requests</h2>
+<p style="color:var(--muted)">Approving removes the entry (maintenance or line-item corpus payments go back to unpaid; expenses and collection payments are deleted) and is audited. Rejecting keeps it.</p>
+{% include "_flash.html" %}
+<div class="card">
+  <table>
+    <thead><tr><th>Requested</th><th>By</th><th>Flat</th><th>Entry</th><th>Reason</th><th>Status</th><th class="no-print">Decision</th></tr></thead>
+    <tbody>
+    {% for r in requests %}
+      <tr>
+        <td>{{ r.created_at|format_datetime }}</td>
+        <td>{{ r.requested_by.username }}</td>
+        <td>{{ r.flat.number if r.flat else '—' }}</td>
+        <td>{{ labels.get(r.record_type, r.record_type) }}: {{ r.summary }}</td>
+        <td>{{ r.reason or '—' }}</td>
+        <td>
+          {% if r.status == 'pending' %}<span class="badge warn">Pending</span>
+          {% elif r.status == 'approved' %}<span class="badge ok">Approved</span>
+          {% else %}<span class="badge bad">Rejected</span>{% endif %}
+          {% if r.decided_at %}<br><small>{{ r.decided_at|format_datetime }} · {{ r.decided_by }}{% if r.decision_note %} — {{ r.decision_note }}{% endif %}</small>{% endif %}
+        </td>
+        <td class="no-print">
+          {% if r.status == 'pending' %}
+          <form method="post" action="/admin/cancel-requests/{{ r.id }}/approve" class="inline" onsubmit="return confirm('Approve and remove this entry?')">
+            <input type="text" name="note" placeholder="Note (optional)">
+            <button type="submit" class="danger">Approve</button>
+          </form>
+          <form method="post" action="/admin/cancel-requests/{{ r.id }}/reject" class="inline">
+            <input type="text" name="note" placeholder="Reason (optional)">
+            <button type="submit" class="secondary">Reject</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" style="color:var(--muted)">No cancel requests.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

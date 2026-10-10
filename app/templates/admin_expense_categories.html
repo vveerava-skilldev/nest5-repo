@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Expense categories — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Expense categories</h2>
+<p style="color:var(--muted)">Categories offered on the expense forms. Disabled categories are hidden from the forms; existing expenses keep whatever category they were saved with. "Owners may use" controls the owner expense form.</p>
+{% include "_flash.html" %}
+<div class="card">
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Category</th><th>Used by</th><th>Status</th><th>Owners may use</th><th class="no-print">Rename</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      {% set c = r.category %}
+      <tr>
+        <td><strong>{{ c.name }}</strong></td>
+        <td>{{ r.used }} expense(s)</td>
+        <td>
+          <form method="post" action="/admin/expense-categories/{{ c.id }}/set" class="inline">
+            <input type="hidden" name="field" value="is_active">
+            <input type="hidden" name="value" value="{{ '0' if r.active else '1' }}">
+            {% if r.active %}<span class="badge ok">Enabled</span> <button type="submit" class="secondary">Disable</button>
+            {% else %}<span class="badge">Disabled</span> <button type="submit" class="secondary">Enable</button>{% endif %}
+          </form>
+        </td>
+        <td>
+          <form method="post" action="/admin/expense-categories/{{ c.id }}/set" class="inline">
+            <input type="hidden" name="field" value="owner_allowed">
+            <input type="hidden" name="value" value="{{ '0' if r.owner_allowed else '1' }}">
+            {% if r.owner_allowed %}<span class="badge ok">Yes</span> <button type="submit" class="secondary">Admin only</button>
+            {% else %}<span class="badge">Admin only</span> <button type="submit" class="secondary">Allow owners</button>{% endif %}
+          </form>
+        </td>
+        <td class="no-print">
+          <details class="inline-details">
+            <summary>Rename</summary>
+            <form method="post" action="/admin/expense-categories/{{ c.id }}/rename" class="inline">
+              <input name="name" value="{{ c.name }}" required>
+              {% if r.used %}<label><input type="checkbox" name="update_existing" value="1"> also rename on {{ r.used }} existing expense(s)</label>{% endif %}
+              <button type="submit">Save</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+<div class="card no-print">
+  <h3 style="margin-top:0">Add category</h3>
+  <form method="post" action="/admin/expense-categories" class="inline">
+    <input name="name" placeholder="e.g. Lift AMC" required>
+    <label><input type="checkbox" name="owner_allowed" value="1" checked> Owners may use</label>
+    <button type="submit">Add</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% macro freq_label(t) %}{{ t.frequency.value|capitalize }}{% if t.custom_interval_days %} (every {{ t.custom_interval_days }} days){% endif %}{% endmacro %}
+
+{% macro status_badge(status) %}
+{% if status == 'overdue' %}<span class="badge bad">Overdue</span>
+{% elif status == 'due_soon' %}<span class="badge warn">Due this week</span>
+{% elif status == 'ok' %}<span class="badge ok">On track</span>
+{% else %}<span class="badge">No date</span>{% endif %}
+{% endmacro %}
+
+{% macro done_form(t, today, back) %}
+<details class="no-print">
+  <summary>Mark done</summary>
+  <form method="post" action="/schedule/{{ t.id }}/done" class="stack-form">
+    <input type="hidden" name="back" value="{{ back }}">
+    <label>Done on <input type="date" name="done_on" value="{{ today.isoformat() }}" required></label>
+    <label>Done by <input name="done_by" placeholder="e.g. Vendor technician"></label>
+    <label>Cost ₹ <input name="cost" type="number" min="0" placeholder="Optional"></label>
+    <label>Notes <input name="notes" placeholder="Optional"></label>
+    <button type="submit">Save</button>
+  </form>
+</details>
+{% endmacro %}
+
+{% macro frequency_fields(frequencies, current=None, days=None) %}
+<label>Frequency
+  <select name="frequency">
+    {% for f in frequencies %}<option value="{{ f.value }}"{% if (current and current == f) or (not current and f.value == 'monthly') %} selected{% endif %}>{{ f.value|capitalize }}</option>{% endfor %}
+  </select>
+</label>
+<label>Custom days <input name="custom_interval_days" type="number" min="1" value="{{ days or '' }}" placeholder="For custom"></label>
+{% endmacro %}
+
+{% macro task_rows(tasks, today, back, frequencies, show_asset=False) %}
+{% for t, status in tasks %}
+<tr>
+  {% if show_asset %}<td><a href="/assets/{{ t.asset_id }}">{{ t.asset }}</a></td>{% endif %}
+  <td>{{ t.task }}{% if t.notes %}<br><small style="color:var(--muted)">{{ t.notes }}</small>{% endif %}</td>
+  <td>{{ freq_label(t) }}</td>
+  <td>{{ t.last_done_on|format_date }}</td>
+  <td>{{ t.next_due_on|format_date }}</td>
+  <td>{{ status_badge(status) }}</td>
+  {% if is_admin(request) %}
+  <td class="no-print">
+    {{ done_form(t, today, back) }}
+    <details>
+      <summary>Edit</summary>
+      <form method="post" action="/schedule/{{ t.id }}/edit" class="stack-form">
+        <input type="hidden" name="back" value="{{ back }}">
+        <label>Task <input name="task" value="{{ t.task }}" required></label>
+        {{ frequency_fields(frequencies, t.frequency, t.custom_interval_days) }}
+        <label>Next due <input type="date" name="next_due_on" placeholder="Keep / recompute"></label>
+        <label>Vendor <input name="vendor" value="{{ t.vendor or '' }}"></label>
+        <label>Notes <input name="notes" value="{{ t.notes or '' }}"></label>
+        <button type="submit">Save</button>
+      </form>
+      <form method="post" action="/schedule/{{ t.id }}/delete" onsubmit="return confirm('Remove this task?')">
+        <input type="hidden" name="back" value="{{ back }}">
+        <button type="submit" class="danger">Delete task</button>
+      </form>
+    </details>
+  </td>
+  {% endif %}
+</tr>
+{% endfor %}
+{% endmacro %}
+
+{% macro asset_fields(asset_types, a=None) %}
+<label>Name <input name="name" value="{{ a.name if a else '' }}" placeholder="e.g. Lift" required></label>
+<label>Type
+  <select name="asset_type">
+    {% for kind in asset_types %}<option{% if a and a.asset_type == kind %} selected{% endif %}>{{ kind }}</option>{% endfor %}
+    {% if a and a.asset_type and a.asset_type not in asset_types %}<option selected>{{ a.asset_type }}</option>{% endif %}
+  </select>
+</label>
+<label>Location <input name="location" value="{{ a.location or '' if a else '' }}" placeholder="e.g. Terrace"></label>
+<label>Vendor / AMC contact <input name="vendor_contact" value="{{ a.vendor_contact or '' if a else '' }}" placeholder="Name, phone"></label>
+<label>Install date <input type="date" name="install_date" value="{{ a.install_date.isoformat() if a and a.install_date else '' }}"></label>
+<label>Warranty / AMC expiry <input type="date" name="warranty_expiry" value="{{ a.warranty_expiry.isoformat() if a and a.warranty_expiry else '' }}"></label>
+<label>Cost ₹ <input name="cost" type="number" min="0" value="{{ a.cost if a and a.cost is not none else '' }}" placeholder="Optional"></label>
+<label>Notes <input name="notes" value="{{ a.notes or '' if a else '' }}"></label>
+{% endmacro %}

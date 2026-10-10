@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Audit log — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Change history</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>When</th><th>User</th><th>Entity</th><th>Action</th><th>Before</th><th>After</th></tr></thead>
+    <tbody>
+    {% for log in logs %}
+      <tr>
+        <td>{{ log.created_at|format_datetime }}</td>
+        <td>{{ log.user_label }}</td>
+        <td>{{ log.entity_type }} #{{ log.entity_id or '—' }}</td>
+        <td>{{ log.action }}</td>
+        <td><code style="font-size:0.7rem;word-break:break-all">{{ log.before_json or '—' }}</code></td>
+        <td><code style="font-size:0.7rem;word-break:break-all">{{ log.after_json or '—' }}</code></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

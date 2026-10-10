@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Settlements — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Owner settlements</h2>
+{% include "_flash.html" %}
+<p>Available Account Balance: ₹{{ available }}
+  {% if can_settle %}<span class="badge ok">Can settle</span>{% else %}<span class="badge bad">Settlement blocked</span>{% endif %}
+</p>
+<div class="card">
+  <h3 style="margin-top:0">Per-owner status</h3>
+  <table>
+    <thead><tr><th>Flat</th><th>Pending reimbursement</th><th>Already settled</th></tr></thead>
+    <tbody>
+    {% for row in by_flat %}
+      <tr>
+        <td>{{ row.flat.number }}{% if row.flat.contact_name %} ({{ row.flat.contact_name }}){% endif %}</td>
+        <td>₹{{ row.pending_amount }}</td>
+        <td>₹{{ row.settled_amount }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <h3 style="margin-top:0">Unsettled advances</h3>
+  <table>
+    <thead><tr><th>Date</th><th>Description</th><th>Paid by</th><th>Amount</th><th></th></tr></thead>
+    <tbody>
+    {% for e in unsettled %}
+      <tr>
+        <td>{{ e.expense_date|format_date }}</td>
+        <td>{{ e.description }}</td>
+        <td>{% if e.paid_by_flat %}Paid by Flat {{ e.paid_by_flat.number }}{% else %}Account Balance{% endif %}</td>
+        <td>₹{{ e.amount }}</td>
+        <td>
+          {% if can_settle and available >= e.amount %}
+          <form method="post" action="/settlements/{{ e.id }}/settle" class="inline">
+            <input type="date" name="settled_on" value="{{ e.expense_date|iso_date }}" required>
+            <input type="text" name="note" placeholder="Note">
+            <button type="submit">Reimburse from Account Balance</button>
+          </form>
+          {% else %}
+          <span class="badge bad">Blocked</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" style="color:var(--muted)">No pending reimbursements.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <h3 style="margin-top:0">Recent settlements</h3>
+  <table>
+    <thead><tr><th>Date</th><th>Expense</th><th>Paid by</th><th>Settled from</th><th>Amount</th><th></th></tr></thead>
+    <tbody>
+    {% for s in settled_rows %}
+      <tr>
+        <td>{{ s.settled_on|format_date }}</td>
+        <td>{{ s.expense.description if s.expense else '—' }}</td>
+        <td>{% if s.expense and s.expense.paid_by_flat %}Paid by Flat {{ s.expense.paid_by_flat.number }}{% else %}Account Balance{% endif %}</td>
+        <td>{% if s.fund_type.value == 'maintenance' %}Account Balance{% else %}{{ s.fund_type.value|capitalize }}{% endif %}</td>
+        <td>₹{{ s.amount }}</td>
+        <td>
+          <form method="post" action="/settlements/{{ s.id }}/revert" onsubmit="return confirm('Revert settlement?')">
+            <button type="submit" class="secondary">Revert</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
