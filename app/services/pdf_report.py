@@ -25,6 +25,7 @@ from app.models import (
 from app.config import PORTAL_NAME
 from app.services import corpus_campaigns as campaigns_svc
 from app.services import ledger as ledger_svc
+from app.services import payment_source as source_svc
 
 
 def rs(amount: int | None) -> str:
@@ -147,7 +148,7 @@ def build_summary_pdf(db: Session, period: LedgerPeriod | None) -> bytes:
             Paragraph(escape(e.category), styles["Cell"]),
             Paragraph(escape(e.description), styles["Cell"]),
             rs(e.amount),
-            f"Flat {e.paid_by_flat.number}" if e.paid_by_flat else "Account Balance",
+            source_svc.label(e),
             "Yes" if e.is_settled else "No",
         ])
     exp_rows.append(["Total", "", "", rs(sum(e.amount for e in expenses)), "", ""])

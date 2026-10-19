@@ -59,6 +59,7 @@ from app.services import reminders as reminders_svc
 from app.services import users as users_svc
 from app.services import dashboard_view as dashboard_view_svc
 from app.services import activity as activity_svc
+from app.services import payment_source as source_svc
 from app.services import emptiness as emptiness_svc
 from app.services.access import can_view_flat, is_admin, is_tenant, tenant_may
 from app.services.auth import require_auth
@@ -113,6 +114,21 @@ def _expenses_url(period_id: int | None = None) -> str:
     if period_id:
         return f"/expenses?period_id={period_id}"
     return "/expenses"
+
+
+def _expenses_back(period_id: int | None = None, **params) -> RedirectResponse:
+    url = _expenses_url(period_id)
+    params = {k: v for k, v in params.items() if v not in (None, "")}
+    if params:
+        url += ("&" if "?" in url else "?") + urlencode(params)
+    return RedirectResponse(url, status_code=303)
+
+
+def _int_or_none(raw) -> int | None:
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -412,6 +428,11 @@ def expenses_page(
         "all_total": sum(e.amount for e in all_expenses),
         "all_pending": sum(e.amount for e in all_expenses if e.paid_by_flat_id and not e.is_settled),
     }
+    admin = is_admin(request)
+    offer = None
+    if admin and request.query_params.get("offer"):
+        qp = request.query_params
+        offer = {k: qp.get(f"d_{k}", "") for k in ("description", "category", "amount", "date", "period")}
     return templates.TemplateResponse(
         request,
         "expenses.html",
@@ -425,12 +446,16 @@ def expenses_page(
             "nav": bundle["nav"],
             "summary": bundle["summary"],
             "available": ledger_svc.available_for_settlement(db),
-            "expense_categories": _expense_categories(db, owner=not is_admin(request)),
+            "expense_categories": _expense_categories(db, owner=not admin),
             "add_category_value": ADD_CATEGORY_VALUE,
             "cancel_pending": owner_svc.pending_requests_map(db, "expense"),
             "rejected_count": rejected_count,
             "rejected_rows": rejected_rows,
             "today": ist_today(),
+            "source_label": source_svc.label,
+            "unconfirmed": source_svc.unconfirmed(db) if admin else [],
+            "source_problems": source_svc.problems(db) if admin else [],
+            "offer": offer,
         },
     )
 
@@ -443,24 +468,57 @@ def expense_create(
     category_other: str = Form(""),
     amount: int = Form(...),
     expense_date: str = Form(...),
-    paid_by_flat_id: int | None = Form(None),
-    period_id: int | None = Form(None),
+    payment_source: str = Form(""),
+    paid_by_flat_id: str = Form(""),
+    payment_note: str = Form(""),
+    period_id: str = Form(""),
     db: Session = Depends(get_db),
 ):
     require_auth(request)
+    period_pk = _int_or_none(period_id)
+
+    def fail(message: str, **extra) -> RedirectResponse:
+        db.rollback()
+        return _expenses_back(period_pk, error=message, **extra)
+
+    try:
+        exp_date = date.fromisoformat(expense_date)
+    except ValueError:
+        return fail("Enter a valid payment date.")
+    flat_pk = _int_or_none(paid_by_flat_id)
+    source = payment_source.strip() or (source_svc.FLAT if flat_pk else "")
+    if not source:
+        return fail("Choose who paid: a flat, or the society account.")
+    period = db.get(LedgerPeriod, period_pk) if period_pk else None
+    if period is None:
+        period = campaigns_svc.period_for_date(db, exp_date)
+    if period is None:
+        return fail(f"{exp_date:%m-%Y} is not open in the ledger yet. Add that month first, then save the expense.")
+    category_name = _save_expense_category(db, category, category_other)
     exp = Expense(
-        description=description,
-        category=_save_expense_category(db, category, category_other),
+        description=description.strip(),
+        category=category_name,
         amount=amount,
-        expense_date=date.fromisoformat(expense_date),
-        paid_by_flat_id=paid_by_flat_id or None,
-        period_id=period_id or None,
+        expense_date=exp_date,
+        paid_by_flat_id=flat_pk if source == source_svc.FLAT else None,
+        period_id=period.id,
     )
+    if not exp.description:
+        return fail("Enter a description.")
     db.add(exp)
     db.flush()
+    try:
+        outcome = source_svc.change(db, exp, source=source, flat_id=flat_pk, amount=amount, note=payment_note)
+    except source_svc.SourceError as exc:
+        extra = {}
+        if source == source_svc.SOCIETY and str(exc).startswith("Balance"):
+            extra = {"offer": 1, "d_description": exp.description, "d_category": category_name,
+                     "d_amount": amount, "d_date": exp_date.isoformat(), "d_period": period.id}
+        return fail(str(exc), **extra)
     audit_svc.log_audit(db, entity_type="expense", entity_id=exp.id, action="create", after=exp)
     db.commit()
-    return RedirectResponse(_expenses_url(period_id), status_code=303)
+    how = "paid from the society account" if exp.source == source_svc.SOCIETY else f"paid by {source_svc.label(exp)}"
+    return _expenses_back(period_pk, msg=f"Saved {exp.description} (₹{exp.amount}), {how}.")
 
 
 @router.post("/expenses/{expense_id}/edit")
@@ -472,7 +530,9 @@ def expense_edit(
     category_other: str = Form(""),
     amount: int = Form(...),
     expense_date: str = Form(...),
-    paid_by_flat_id: int | None = Form(None),
+    payment_source: str = Form(""),
+    paid_by_flat_id: str = Form(""),
+    payment_note: str = Form(""),
     db: Session = Depends(get_db),
 ):
     require_auth(request)
@@ -480,20 +540,77 @@ def expense_edit(
     if not exp or exp.deleted_at:
         raise HTTPException(404)
     if exp.is_rejected:
-        url = _expenses_url(exp.period_id)
-        sep = "&" if "?" in url else "?"
-        return RedirectResponse(
-            f"{url}{sep}{urlencode({'error': 'Rejected expenses cannot be edited; reinstate it first.'})}", status_code=303
-        )
-    before = exp
-    exp.description = description
+        return _expenses_back(exp.period_id, error="Rejected expenses cannot be edited; reinstate it first.")
+
+    def fail(message: str) -> RedirectResponse:
+        db.rollback()
+        return _expenses_back(exp.period_id, error=message)
+
+    try:
+        exp_date = date.fromisoformat(expense_date)
+    except ValueError:
+        return fail("Enter a valid payment date.")
+    if not description.strip():
+        return fail("Enter a description.")
+    if exp.period_id is None:
+        period = campaigns_svc.period_for_date(db, exp_date)
+        if period is None:
+            return fail(f"{exp_date:%m-%Y} is not open in the ledger yet. Add that month first, then save the expense.")
+        exp.period_id = period.id
+    flat_pk = _int_or_none(paid_by_flat_id)
+    source = payment_source.strip()
+    if not source:
+        if flat_pk:
+            source = source_svc.FLAT
+        elif exp.source in (source_svc.FLAT, source_svc.SOCIETY):
+            source, flat_pk = exp.source, exp.paid_by_flat_id
+    before = source_svc.snap(exp)
+    exp.description = description.strip()
     exp.category = _save_expense_category(db, category, category_other)
-    exp.amount = amount
-    exp.expense_date = date.fromisoformat(expense_date)
-    exp.paid_by_flat_id = paid_by_flat_id or None
-    audit_svc.log_audit(db, entity_type="expense", entity_id=exp.id, action="update", before=before, after=exp)
+    exp.expense_date = exp_date
+    try:
+        if source:
+            outcome = source_svc.change(db, exp, source=source, flat_id=flat_pk, amount=amount, note=payment_note)
+        else:
+            source_svc.update_unconfirmed_amount(db, exp, amount)
+            outcome = source_svc.Outcome("update", "Expense updated.")
+    except source_svc.SourceError as exc:
+        return fail(str(exc))
+    audit_svc.log_audit(db, entity_type="expense", entity_id=exp.id, action=outcome.action, before=before, after=exp)
     db.commit()
-    return RedirectResponse(_expenses_url(exp.period_id), status_code=303)
+    return _expenses_back(exp.period_id, msg=outcome.message)
+
+
+@router.post("/expenses/{expense_id}/confirm-source")
+def expense_confirm_source(
+    request: Request,
+    expense_id: int,
+    payment_source: str = Form(""),
+    paid_by_flat_id: str = Form(""),
+    payment_note: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Admin: confirm where an older expense with no flat came from. Never changes a balance by itself
+    when the expense already has its settlement."""
+    require_auth(request)
+    if not is_admin(request):
+        raise HTTPException(403)
+    exp = db.get(Expense, expense_id)
+    if not exp or exp.deleted_at or exp.is_rejected:
+        raise HTTPException(404)
+    if exp.source is not None:
+        return _expenses_back(exp.period_id, error="That expense's payment source is already confirmed.")
+    before = source_svc.snap(exp)
+    try:
+        outcome = source_svc.change(
+            db, exp, source=payment_source, flat_id=_int_or_none(paid_by_flat_id), amount=exp.amount, note=payment_note
+        )
+    except source_svc.SourceError as exc:
+        db.rollback()
+        return _expenses_back(exp.period_id, error=str(exc))
+    audit_svc.log_audit(db, entity_type="expense", entity_id=exp.id, action="confirm_source", before=before, after=exp)
+    db.commit()
+    return _expenses_back(exp.period_id, msg=f"{exp.description}: {outcome.message}")
 
 
 @router.post("/expenses/{expense_id}/delete")
@@ -647,6 +764,8 @@ def settle_expense(
         return fail(f"'{exp.description}' was rejected and cannot be settled.")
     if exp.is_settled:
         return fail(f"'{exp.description}' is already settled.")
+    if exp.paid_by_flat_id is None:
+        return fail(f"'{exp.description}' has no paying flat, so there is nobody to reimburse. Confirm who paid it on the Expenses page.")
     available = ledger_svc.available_for_settlement(db)
     if available < exp.amount:
         return fail(
@@ -693,6 +812,11 @@ def revert_settlement(request: Request, settlement_id: int, db: Session = Depend
     if not st or st.reverted_at:
         return _settlements_back(error="That settlement was already reverted.")
     exp = st.expense
+    if exp is not None and exp.paid_by_flat_id is None:
+        return _settlements_back(
+            error="This expense was not paid by a flat, so its settlement cannot be reverted here. "
+                  "Change who paid it on the Expenses page instead."
+        )
     before_st, before_exp = st, exp
     st.reverted_at = datetime.utcnow()
     exp.is_settled = False

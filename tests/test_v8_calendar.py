@@ -475,7 +475,7 @@ def test_migration_from_scratch_and_roundtrip(tmp_path):
     db = tmp_path / "fresh.db"
     done = _alembic(db, "upgrade", "head")
     assert done.returncode == 0, done.stderr
-    assert "calendar_events" in _tables(db) and _version(db) == "b4e7c2a9d531"
+    assert "calendar_events" in _tables(db) and _version(db) == "d6a3f9b1c428"
     with sqlite3.connect(db) as conn:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(calendar_events)")}
         idx = {r[1] for r in conn.execute("PRAGMA index_list(calendar_events)")}
@@ -499,7 +499,7 @@ def test_migration_tolerates_table_created_by_startup_safety_net(tmp_path):
     assert "calendar_events" in _tables(db)
     done = _alembic(db, "upgrade", "head")
     assert done.returncode == 0, done.stderr
-    assert _version(db) == "b4e7c2a9d531"
+    assert _version(db) == "d6a3f9b1c428"
 
 
 def _v7_db(tmp_path: Path) -> Path:
@@ -525,7 +525,7 @@ def test_migration_on_a_copy_of_the_v7_database(tmp_path):
                   if t in _tables(db)}
     done = _alembic(db, "upgrade", "head")
     assert done.returncode == 0, done.stderr
-    assert _version(db) == "b4e7c2a9d531" and "calendar_events" in _tables(db)
+    assert _version(db) == "d6a3f9b1c428" and "calendar_events" in _tables(db)
     with sqlite3.connect(db) as conn:
         after = {t: conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0] for t in before}
         assert conn.execute("SELECT COUNT(*) FROM calendar_events").fetchone()[0] == 0

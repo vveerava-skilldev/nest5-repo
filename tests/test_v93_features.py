@@ -396,5 +396,5 @@ def test_no_insights_anywhere(seeded_db, admin_client, owner_client):
 
 
 def test_version_label(seeded_db, owner_client):
-    assert APP_VERSION == "nest5-v7.4"
-    assert "nest5-v7.4" in owner_client.get("/payments/maintenance").text
+    assert APP_VERSION == "nest5-v7.5"
+    assert "nest5-v7.5" in owner_client.get("/payments/maintenance").text

@@ -1,0 +1,21 @@
+{# "Who paid?" fields shared by the add form, the edit panel and the confirm panel (admin only).
+   source: 'flat' | 'society' | '' (nothing chosen yet).  flat_id: the selected flat.  note: current society note.
+   locked: 'settled' hides option B (a settled owner advance cannot become a society expense). #}
+{% macro who_paid(flats, source='flat', flat_id=None, note='', locked='', available=None, key='x') %}
+<fieldset class="who-paid span-2" data-who-paid>
+  <legend>Who paid?</legend>
+  <label class="who-opt"><input type="radio" name="payment_source" value="flat" {% if source != 'society' %}checked{% endif %}> <span><strong>A.</strong> A flat paid it — reimburse later</span></label>
+  <label class="who-opt{% if locked == 'settled' %} muted{% endif %}"><input type="radio" name="payment_source" value="society" {% if source == 'society' %}checked{% endif %}{% if locked == 'settled' %} disabled{% endif %}> <span><strong>B.</strong> Paid from the society account{% if locked == 'settled' %} (not possible: already reimbursed to the flat){% endif %}</span></label>
+  <label class="who-flat">Flat that paid
+    <select name="paid_by_flat_id">
+      <option value="">— choose a flat —</option>
+      {% for f in flats %}<option value="{{ f.id }}" {% if flat_id == f.id %}selected{% endif %}>Flat {{ f.number }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="who-note">Short note (required)
+    <input type="text" name="payment_note" value="{{ note or '' }}" maxlength="255" placeholder="e.g. paid in cash from the office account">
+  </label>
+  <p class="muted who-hint who-hint-a">The Account Balance does not change until you settle this on the Settlements page.</p>
+  <p class="muted who-hint who-hint-b">The Account Balance drops by the amount as soon as you save{% if available is not none %} (available now: ₹{{ available }}){% endif %}.</p>
+</fieldset>
+{% endmacro %}

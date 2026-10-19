@@ -119,10 +119,18 @@ class Expense(Base):
     rejection_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     rejected_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # v7.5: 'flat' (an owner advance), 'society' (paid from the society account, settled when saved) or empty
+    # (an older expense with no flat that the admin has not confirmed yet; counted exactly as before).
+    payment_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     paid_by_flat: Mapped["Flat | None"] = relationship(back_populates="expenses_paid")
     submitted_by: Mapped["User | None"] = relationship()
     settlement: Mapped["Settlement | None"] = relationship(back_populates="expense", uselist=False)
+
+    @property
+    def source(self) -> str | None:
+        """The payment source, read through the flat for rows written before the column existed."""
+        return self.payment_source or ("flat" if self.paid_by_flat_id else None)
 
     @property
     def is_rejected(self) -> bool:

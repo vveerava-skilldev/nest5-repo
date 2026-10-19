@@ -270,7 +270,7 @@ out['pages'] = {u: [admin.get(u).status_code, admin.get(u).text] for u in ('/adm
 
 # ---- migration ------------------------------------------------------------------------------
 
-HEAD = "b4e7c2a9d531"
+HEAD = "d6a3f9b1c428"
 PREV = "d4b8f1a3c627"
 
 

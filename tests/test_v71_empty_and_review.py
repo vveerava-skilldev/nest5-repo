@@ -160,7 +160,7 @@ admin.post('/corpus/campaigns', data={'name': 'Lift fund', 'target_amount': '500
 admin.post('/projects', data={'name': 'Terrace', 'total_cost': '10000'})
 from app.services import periods as periods_svc
 pid = periods_svc.resolve_period(db, None).id
-admin.post('/expenses', data={'expense_date': '2026-10-05', 'category': 'Common', 'description': 'Bulbs', 'amount': '640', 'period_id': str(pid)})
+admin.post('/expenses', data={'expense_date': '2026-10-05', 'category': 'Common', 'description': 'Bulbs', 'amount': '640', 'period_id': str(pid), 'payment_source': 'society', 'payment_note': 'Cash'})
 out['after'] = {u: admin.get(u).text for u in ('/', '/corpus', '/projects', '/expenses')}
 """
     after = run_scratch(tmp_path, code)["after"]
@@ -364,7 +364,15 @@ def test_actions_board_is_grouped_one_line_per_item_and_hides_empty_groups(seede
 
 
 def test_actions_board_all_clear_message(tmp_path):
-    out = run_scratch(tmp_path, "out['page'] = admin.get('/admin/actions').text\nout['dash'] = admin.get('/').text")
+    # The legacy sample has one older expense with no paying flat; confirming it is the only open item.
+    code = (
+        "out['before'] = admin.get('/admin/actions').text\n"
+        "e = db.scalar(select(Expense).where(Expense.paid_by_flat_id.is_(None)))\n"
+        "admin.post(f'/expenses/{e.id}/confirm-source', data={'payment_source': 'society'})\n"
+        "out['page'] = admin.get('/admin/actions').text\nout['dash'] = admin.get('/').text"
+    )
+    out = run_scratch(tmp_path, code)
+    assert "Confirm payment source" in out["before"] and "All clear" not in out["before"]
     assert "All clear" in out["page"]
     assert "Open items" not in out["page"]
     assert "dashboard-actions" not in out["dash"]

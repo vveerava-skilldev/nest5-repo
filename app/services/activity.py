@@ -164,9 +164,17 @@ def _sentence(entry: AuditLog, role: str, lk: Lookups) -> tuple[str, str | None,
             "unsettle": "reverted the settlement of expense",
             "reinstate": "reinstated expense",
             "purge": "deleted rejected expense",
+            "confirm_source": "confirmed who paid expense",
+            "switch_source": "changed who paid expense",
         }.get(a)
         if verb:
-            return f"{verb} {desc}{amt}".replace("  ", " ").strip(), flat, amount
+            how = ""
+            if a in ("create", "update", "confirm_source", "switch_source"):
+                if p.get("payment_source") == "society":
+                    how = ", paid from the society account"
+                elif p.get("payment_source") == "flat" and flat:
+                    how = f", paid by Flat {flat}"
+            return f"{verb} {desc}{amt}{how}".replace("  ", " ").strip(), flat, amount
         if a == "clear_rejected":
             n = (after.get("purged") if isinstance(after.get("purged"), int) else None)
             return f"cleared {n if n is not None else 'all'} rejected expense(s)", None, None

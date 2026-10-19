@@ -1,6 +1,6 @@
 """Account Balance vs what is owed back to owners (unsettled owner expenses)."""
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, defer, selectinload
 
 from app.models import Expense, Flat
 from app.services import ledger as ledger_svc
@@ -10,7 +10,8 @@ def _unsettled(db: Session, flat_ids: list[int] | None = None) -> list[Expense]:
     q = (
         select(Expense)
         .where(Expense.is_settled.is_(False), Expense.counted(), Expense.paid_by_flat_id.isnot(None))
-        .options(selectinload(Expense.paid_by_flat))
+        # Deferred: the v7.3 migration reaches this query before expenses.payment_source exists.
+        .options(defer(Expense.payment_source), selectinload(Expense.paid_by_flat))
         .order_by(Expense.expense_date, Expense.id)
     )
     if flat_ids is not None:

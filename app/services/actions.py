@@ -18,6 +18,7 @@ from app.models import (
 from app.services import balances as balances_svc
 from app.services import corpus_campaigns as campaigns_svc
 from app.services import ledger as ledger_svc
+from app.services import payment_source as source_svc
 from app.services import recurring as recurring_svc
 from app.services import reminders as reminders_svc
 from app.services import schedule as schedule_svc
@@ -26,7 +27,7 @@ from app.dates import format_date as fmt_date, format_datetime as fmt_datetime
 
 SECTIONS = (
     ("review", "Needs your review", ("submissions", "cancel_requests")),
-    ("money", "Money", ("settle", "maintenance", "corpus", "projects", "recurring")),
+    ("money", "Money", ("settle", "confirm_source", "maintenance", "corpus", "projects", "recurring")),
     ("other", "Other", ("assets", "users")),
 )
 
@@ -56,6 +57,14 @@ def build(db: Session, today: date | None = None) -> dict:
             "none": f"Account Balance (₹{bal['held']}) is not enough to settle any of them yet."}.get(bal["state"])
     group("settle", "Unsettled owner expenses to settle", "/settlements", settle_rows, empty="No owner expenses waiting.",
           action=note)
+
+    confirm_rows = [
+        {"text": f"{u['expense'].description} ₹{u['expense'].amount} ({fmt_date(u['expense'].expense_date)})",
+         "detail": "no paying flat; pre-selected as the society account" if u["suggest"] else "no paying flat; choose who paid",
+         "link": "/expenses#confirm-source", "cta": "Confirm"} for u in source_svc.unconfirmed(db)]
+    group("confirm_source", "Confirm payment source", "/expenses#confirm-source", confirm_rows,
+          severity="info", empty="Every expense has a confirmed payment source.",
+          action="Older expenses with no paying flat. Confirming changes no balance." if confirm_rows else None)
 
     overdue_m: dict[int, list] = {}
     for mp in db.scalars(

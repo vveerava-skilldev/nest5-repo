@@ -160,6 +160,7 @@ def owner_expense_submit(
         amount=value,
         expense_date=exp_date,
         paid_by_flat_id=flat_id,
+        payment_source="flat",
         period_id=period.id,
         is_settled=False,
         submitted_by_user_id=_owner_user_id(request),
@@ -215,6 +216,7 @@ def owner_expense_edit(
     exp.amount = value
     exp.expense_date = exp_date
     exp.paid_by_flat_id = flat_id
+    exp.payment_source = "flat"
     exp.period_id = period.id
     db.flush()
     audit_svc.log_audit(db, entity_type="expense", entity_id=exp.id, action="owner_edit", before=before, after=exp)

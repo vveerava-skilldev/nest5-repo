@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-V73, HEAD, PREV = "a3d9e6c1b852", "b4e7c2a9d531", "e5c1a7b9d204"
+V73, HEAD, PREV = "a3d9e6c1b852", "d6a3f9b1c428", "e5c1a7b9d204"
 PAYEE_TABLES = ("maintenance_payments", "corpus_payments", "project_contributions", "submission_rejections")
 PAYEE_COLS = {"payee_vpa", "payee_mobile", "payee_name", "payee_settings_id"}
 NEW_TABLES = {"recurring_tasks", "recurring_task_occurrences", "payment_detail_changes"}

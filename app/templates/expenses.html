@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_owner_marks.html" import owner_marks with context %}
+{% from "_expense_source.html" import who_paid %}
 {% block title %}Expenses — {{ portal_name }}{% endblock %}
 {% block content %}
 <h2>Common expenses</h2>
@@ -45,18 +46,61 @@
       <label>Amount
         <input name="amount" type="number" min="1" placeholder="Amount" required>
       </label>
-      <label>Paid by
-        <select name="paid_by_flat_id">
-          <option value="">— Account Balance (no owner advance) —</option>
-          {% for f in flats %}<option value="{{ f.id }}">Flat {{ f.number }} paid</option>{% endfor %}
-        </select>
-      </label>
+      {{ who_paid(flats, 'flat', None, '', '', available) }}
       {% if period %}<input type="hidden" name="period_id" value="{{ period.id }}">{% endif %}
       <button type="submit">Save</button>
     </div>
   </form>
 </div>
 {% if admin_empty %}</details>{% endif %}
+{% endif %}
+{% if is_admin(request) and source_problems %}
+<div class="card no-print source-problems">
+  <h3 style="margin-top:0">Check these expenses</h3>
+  <p class="muted">The payment source, the flat, the settlement and the amount disagree on these rows. Nothing was changed automatically.</p>
+  <ul>{% for line in source_problems %}<li>{{ line }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% if is_admin(request) and offer %}
+<div class="card no-print source-offer">
+  <h3 style="margin-top:0">Save it as paid by a flat instead?</h3>
+  <p>The Account Balance cannot cover ₹{{ offer.amount }} right now. If a flat paid it, save it as an owner advance; it is reimbursed later from the Settlements page.</p>
+  <form method="post" action="/expenses" class="expense-form">
+    <input type="hidden" name="payment_source" value="flat">
+    <input type="hidden" name="description" value="{{ offer.description }}">
+    <input type="hidden" name="category" value="{{ offer.category }}">
+    <input type="hidden" name="amount" value="{{ offer.amount }}">
+    <input type="hidden" name="expense_date" value="{{ offer.date }}">
+    {% if offer.period %}<input type="hidden" name="period_id" value="{{ offer.period }}">{% endif %}
+    <div class="inline expense-form-grid">
+      <label>{{ offer.description }} · ₹{{ offer.amount }} · {{ offer.date|format_date }} — flat that paid
+        <select name="paid_by_flat_id" required>
+          <option value="">— choose a flat —</option>
+          {% for f in flats %}<option value="{{ f.id }}">Flat {{ f.number }}</option>{% endfor %}
+        </select>
+      </label>
+      <button type="submit">Save as paid by a flat</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% if is_admin(request) and unconfirmed %}
+<div class="card no-print confirm-source" id="confirm-source">
+  <h3 style="margin-top:0">Confirm payment source ({{ unconfirmed|length }})</h3>
+  <p class="muted">These older expenses have no paying flat. Confirming only records who paid; the Account Balance and every total stay exactly as they are.</p>
+  {% for u in unconfirmed %}
+  {% set e = u.expense %}
+  <form method="post" action="/expenses/{{ e.id }}/confirm-source" class="confirm-row">
+    <div class="confirm-what"><strong>{{ e.description }}</strong> · ₹{{ e.amount }} · {{ e.expense_date|format_date }}
+      <div class="muted">{% if u.suggest %}Pre-selected as the society account because {{ u.reason }}. Nothing is changed until you confirm.{% else %}Choose who paid.{% endif %}</div>
+    </div>
+    <div class="inline expense-form-grid">
+      {{ who_paid(flats, u.suggest, None, (u.settlement.note if u.settlement else ''), '', available) }}
+      <button type="submit">Confirm</button>
+    </div>
+  </form>
+  {% endfor %}
+</div>
 {% endif %}
 {% if is_admin(request) and rejected_count %}
 <details class="card no-print rejected-panel">
@@ -94,7 +138,7 @@
         <td>{{ e.category }}</td>
         <td>{{ e.description }}</td>
         <td>₹{{ e.amount }}</td>
-        <td>{% if e.paid_by_flat and not can_view_flat(request, e.paid_by_flat_id) %}Paid by an owner (advance){% elif e.paid_by_flat %}Paid by Flat {{ e.paid_by_flat.number }}{% else %}Account Balance{% endif %}
+        <td>{% if e.paid_by_flat and not can_view_flat(request, e.paid_by_flat_id) %}Paid by an owner (advance){% elif e.paid_by_flat %}Paid by Flat {{ e.paid_by_flat.number }}{% elif e.source == 'society' or not is_admin(request) %}<span class="badge ok">Society account</span>{% else %}<span class="badge warn" title="Confirm who paid in the panel at the top">To confirm</span>{% endif %}
           {{ owner_marks(e, 'expense', cancel_pending, '/expenses' ~ ('?period_id=' ~ e.period_id if e.period_id else '')) }}</td>
         <td>{% if e.is_settled %}<span class="badge ok">Yes</span>{% if e.settlement and not e.settlement.reverted_at and e.settlement.note %}<div class="muted settle-note-text">{{ e.settlement.note }}</div>{% endif %}{% else %}<span class="badge warn">No</span>{% endif %}</td>
         <td class="no-print">
@@ -125,19 +169,19 @@
                   <input name="description" value="{{ e.description }}" required>
                 </label>
                 <label>Amount
-                  <input name="amount" type="number" value="{{ e.amount }}" required>
+                  <input name="amount" type="number" min="1" value="{{ e.amount }}" required>
                 </label>
-                <label>Paid by
-                  <select name="paid_by_flat_id">
-                    <option value="">Account Balance</option>
-                    {% for f in flats %}<option value="{{ f.id }}" {% if e.paid_by_flat_id == f.id %}selected{% endif %}>Flat {{ f.number }}</option>{% endfor %}
-                  </select>
-                </label>
+                {% if e.source %}
+                {{ who_paid(flats, e.source, e.paid_by_flat_id, (e.settlement.note if e.settlement and not e.settlement.reverted_at else ''), ('settled' if e.source == 'flat' and e.is_settled else ''), available) }}
+                {% if e.source == 'flat' and e.is_settled %}<p class="muted span-2">Already reimbursed to the flat: to change the amount, revert the settlement on the Settlements page first.</p>{% endif %}
+                {% else %}
+                <p class="muted span-2">Who paid: <strong>to confirm</strong> (use the “Confirm payment source” panel at the top).</p>
+                {% endif %}
                 <button type="submit">Update</button>
                 <button type="button" class="secondary expense-edit-cancel">Cancel</button>
               </div>
             </form>
-            {% if e.is_settled and e.settlement and not e.settlement.reverted_at %}
+            {% if e.is_settled and e.settlement and not e.settlement.reverted_at and e.source != 'society' %}
             <form method="post" action="/settlements/{{ e.settlement.id }}/note" class="inline settle-note-form" style="margin-top:0.5rem">
               <input type="hidden" name="back" value="{{ back }}">
               <label>Settlement note
@@ -179,12 +223,30 @@
     syncCategoryOther(sel);
     sel.addEventListener("change", () => syncCategoryOther(sel));
   });
+
+  function syncWho(box) {
+    const form = box.closest("form");
+    const src = (box.querySelector('input[name="payment_source"]:checked') || {}).value || "flat";
+    const flat = box.querySelector(".who-flat"), note = box.querySelector(".who-note");
+    const isSociety = src === "society";
+    flat.hidden = isSociety;
+    note.hidden = !isSociety;
+    box.querySelector(".who-hint-a").hidden = isSociety;
+    box.querySelector(".who-hint-b").hidden = !isSociety;
+    flat.querySelector("select").required = !isSociety;
+    note.querySelector("input").required = isSociety;
+  }
+  document.querySelectorAll("[data-who-paid]").forEach((box) => {
+    syncWho(box);
+    box.addEventListener("change", () => syncWho(box));
+  });
   document.querySelectorAll(".expense-edit-cancel").forEach((btn) => {
     btn.addEventListener("click", () => {
       const form = btn.closest("form");
       if (form) {
         form.reset();
         form.querySelectorAll(".expense-category-select").forEach(syncCategoryOther);
+        form.querySelectorAll("[data-who-paid]").forEach(syncWho);
       }
       const d = btn.closest("details");
       if (d) d.removeAttribute("open");

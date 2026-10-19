@@ -60,6 +60,8 @@ def test_add_category_persists_and_edit():
         "category_other": "Plumbing",
         "amount": "750",
         "expense_date": "2026-10-05",
+        "payment_source": "society",
+        "payment_note": "Paid in cash from the office account",
     }
     resp = client.post("/expenses", data=data, cookies=r.cookies, follow_redirects=False)
     assert resp.status_code == 303
@@ -80,6 +82,8 @@ def test_add_category_persists_and_edit():
     db = SessionLocal()
     assert db.get(Expense, exp.id).amount == 800
     db.close()
+    resp = client.post(f"/expenses/{exp.id}/delete", cookies=r.cookies, follow_redirects=False)
+    assert resp.status_code == 303
 
 
 def test_maintenance_fee_revision_history():

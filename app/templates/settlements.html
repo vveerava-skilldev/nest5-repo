@@ -30,7 +30,7 @@
       <tr>
         <td>{{ e.expense_date|format_date }}</td>
         <td>{{ e.description }}</td>
-        <td>{% if e.paid_by_flat %}Paid by Flat {{ e.paid_by_flat.number }}{% else %}Account Balance{% endif %}</td>
+        <td>{% if e.paid_by_flat %}Paid by Flat {{ e.paid_by_flat.number }}{% else %}Society account{% endif %}</td>
         <td>₹{{ e.amount }}</td>
         <td>
           {% if can_settle and available >= e.amount %}
@@ -59,7 +59,7 @@
       <tr>
         <td>{{ s.settled_on|format_date }}</td>
         <td>{{ s.expense.description if s.expense else '—' }}</td>
-        <td>{% if s.expense and s.expense.paid_by_flat %}Paid by Flat {{ s.expense.paid_by_flat.number }}{% else %}Account Balance{% endif %}</td>
+        <td>{% if s.expense and s.expense.paid_by_flat %}Paid by Flat {{ s.expense.paid_by_flat.number }}{% elif s.expense and s.expense.source == 'society' %}Society account{% else %}Society account (to confirm){% endif %}</td>
         <td>{% if s.fund_type.value == 'maintenance' %}Account Balance{% else %}{{ s.fund_type.value|capitalize }}{% endif %}</td>
         <td>₹{{ s.amount }}</td>
         <td class="settle-note-cell">
@@ -69,9 +69,13 @@
           </form>
         </td>
         <td>
+          {% if s.expense and s.expense.paid_by_flat_id %}
           <form method="post" action="/settlements/{{ s.id }}/revert" onsubmit="return confirm('Revert settlement?')">
             <button type="submit" class="secondary">Revert</button>
           </form>
+          {% else %}
+          <span class="muted">Paid from the society account. To undo it, change who paid on <a href="/expenses{% if s.expense and s.expense.period_id %}?period_id={{ s.expense.period_id }}{% endif %}">Expenses</a>.</span>
+          {% endif %}
         </td>
       </tr>
     {% endfor %}

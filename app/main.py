@@ -19,6 +19,7 @@ from app.services import expense_categories as expense_cats_svc
 from app.services import expense_review as expense_review_svc
 from app.services import monthly as monthly_svc
 from app.services import payment_details as payment_details_svc
+from app.services import payment_source as payment_source_svc
 from app.services import projects as projects_svc
 from app.services.flats import sync_flat_roster
 from app.services.schema import add_missing_columns
@@ -42,10 +43,12 @@ def _sync_roster() -> None:
         changed = projects_svc.backfill(db)
         changed += expense_cats_svc.ensure_defaults(db)
         changed += expense_review_svc.repair_rejected_expenses(db)
+        changed += payment_source_svc.backfill(db)
         payment_details_svc.ensure_initial(db)
         payment_details_svc.backfill_payees(db)
         if changed:
             db.commit()
+        payment_source_svc.log_problems(db)
     finally:
         db.close()
 

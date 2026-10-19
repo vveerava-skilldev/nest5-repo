@@ -69,10 +69,11 @@
   {% set sv = dr.all|selectattr('vpa')|list|length > 0 %}
   {% set sa = dr.all|selectattr('at')|list|length > 0 %}
   {% set sn = dr.all|selectattr('note')|list|length > 0 %}
+  {% set ss = dr.all|selectattr('source')|list|length > 0 %}
   {% set rest = 3 + (1 if sm else 0) + (1 if sr else 0) + (1 if sv else 0) + (1 if sa else 0) + (1 if sn else 0) %}
   <div class="rpt-table-wrap">
   <table class="rpt-table rpt-drill">
-    <thead><tr><th>Date</th><th>Flat / owner</th><th>Type</th><th>Detail</th><th>Amount</th>{% if sm %}<th>Mode</th>{% endif %}{% if sr %}<th>UTR / reference</th>{% endif %}{% if sv %}<th>Payee UPI ID</th>{% endif %}<th>Status</th><th>Recorded by</th>{% if sa %}<th>Recorded at (IST)</th>{% endif %}{% if sn %}<th>Note</th>{% endif %}</tr></thead>
+    <thead><tr><th>Date</th><th>Flat / owner</th><th>Type</th><th>Detail</th>{% if ss %}<th>Payment source</th>{% endif %}<th>Amount</th>{% if sm %}<th>Mode</th>{% endif %}{% if sr %}<th>UTR / reference</th>{% endif %}{% if sv %}<th>Payee UPI ID</th>{% endif %}<th>Status</th><th>Recorded by</th>{% if sa %}<th>Recorded at (IST)</th>{% endif %}{% if sn %}<th>Note</th>{% endif %}</tr></thead>
     <tbody>
     {% for e in dr.rows %}
       {% set v = row_values(e, dr.measure) %}
@@ -81,6 +82,7 @@
         <td data-label="Flat / owner" class="{{ 'empty' if not e.flat }}">{% if e.flat %}{{ e.flat }}{% if e.owner %} · {{ e.owner }}{% endif %}{% endif %}</td>
         <td data-label="Type">{{ v[3] }}</td>
         <td data-label="Detail">{{ v[4] }}</td>
+        {% if ss %}<td data-label="Payment source" class="{{ 'empty' if not v[13] }}">{{ v[13] }}</td>{% endif %}
         <td data-label="Amount" class="num">{{ v[5]|inr }}</td>
         {% if sm %}<td data-label="Mode" class="{{ 'empty' if not v[6] }}">{{ v[6] }}</td>{% endif %}
         {% if sr %}<td data-label="UTR / reference" class="{{ 'empty' if not v[7] }}">{{ v[7] }}</td>{% endif %}
@@ -93,8 +95,8 @@
     {% endfor %}
     </tbody>
     <tfoot>
-      <tr class="rpt-total"><td data-label="Total" colspan="4">Total ({{ dr.count if dr.measure != 'excluded' else dr.excluded_count }} entries{% if dr.excluded_count and dr.measure != 'excluded' %}; {{ dr.excluded_count }} not-counted row(s) listed but left out{% endif %})</td><td data-label="Amount" class="num bold">{{ dr.total|inr }}</td><td colspan="{{ rest }}"></td></tr>
-      {% if dr.pages > 1 %}<tr><td colspan="4">This page</td><td class="num">{{ dr.page_total|inr }}</td><td colspan="{{ rest }}"></td></tr>{% endif %}
+      <tr class="rpt-total"><td data-label="Total" colspan="{{ 4 + (1 if ss else 0) }}">Total ({{ dr.count if dr.measure != 'excluded' else dr.excluded_count }} entries{% if dr.excluded_count and dr.measure != 'excluded' %}; {{ dr.excluded_count }} not-counted row(s) listed but left out{% endif %})</td><td data-label="Amount" class="num bold">{{ dr.total|inr }}</td><td colspan="{{ rest }}"></td></tr>
+      {% if dr.pages > 1 %}<tr><td colspan="{{ 4 + (1 if ss else 0) }}">This page</td><td class="num">{{ dr.page_total|inr }}</td><td colspan="{{ rest }}"></td></tr>{% endif %}
     </tfoot>
   </table>
   </div>

@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.domain.flats import FLAT_NUMBERS
 
 PORTAL_NAME = "Sri Krishna Mani Flat Owners Portal"
-APP_VERSION = "nest5-v7.4"
+APP_VERSION = "nest5-v7.5"
 
 
 class Settings(BaseSettings):

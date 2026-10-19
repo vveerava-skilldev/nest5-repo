@@ -40,6 +40,7 @@ from app.models import (
 from app.services import balances as balances_svc
 from app.services import corpus_campaigns as campaigns_svc
 from app.services import ledger as ledger_svc
+from app.services import payment_source as source_svc
 from app.services import projects as projects_svc
 from app.services.activity import inr
 
@@ -57,7 +58,8 @@ MEASURES = {
     "corpus": {"shares": "Goal shares", "collected": "Collected", "pending": "Pending"},
     "projects": {"shares": "Project shares", "collected": "Collected", "pending": "Pending"},
     "expenses": {"total": "Total", "settled": "Settled", "unsettled": "Unsettled", "owed": "Owed to owners",
-                 "by_flat": "Paid by a flat", "by_account": "Paid from Account Balance"},
+                 "by_flat": "Paid by a flat", "by_account": "Paid from society account",
+                 "to_confirm": "Source to confirm"},
     "settlements": {"paidout": "Paid out", "paidout_nofund": "Paid out (no month)"},
 }
 AS_OF_TODAY = {("corpus", "shares"), ("corpus", "pending"), ("projects", "shares"), ("projects", "pending")}
@@ -77,7 +79,8 @@ DEFS = {
     ("expenses", "unsettled"): "Expenses not yet paid out.",
     ("expenses", "owed"): "Part of the unsettled amount that owners paid from their own pocket and are still owed.",
     ("expenses", "by_flat"): "Expenses an owner paid first and recorded as an advance.",
-    ("expenses", "by_account"): "Expenses paid directly from the Account Balance.",
+    ("expenses", "by_account"): "Expenses paid straight from the society account (settled when saved).",
+    ("expenses", "to_confirm"): "Older expenses with no paying flat whose payment source the admin has not confirmed yet.",
     ("settlements", "paidout"): "Money that actually left the Account Balance for settled expenses.",
     ("settlements", "paidout_nofund"): "Settled, but the expense has no ledger month, so it is not in any balance.",
 }
@@ -227,7 +230,7 @@ def parse(params: Any) -> Params:
 
 def _e(**kw) -> dict:
     base = {
-        "key": "", "cat": "", "sub": None, "sub_label": "", "line": None, "line_label": "", "ym": None,
+        "key": "", "source": "", "cat": "", "sub": None, "sub_label": "", "line": None, "line_label": "", "ym": None,
         "date": None, "flat_id": None, "flat": "", "owner": "", "type": "", "detail": "", "amts": {}, "mode": "",
         "ref": "", "vpa": "", "status": "", "counted": True, "reason": "", "by": "admin", "at": None, "note": "",
     }
@@ -360,11 +363,15 @@ def collect(db: Session) -> list[dict]:
                       date=ex.expense_date, **who(ex.paid_by_flat_id), type="Expense", detail=ex.description,
                       by=_by(users.get(ex.submitted_by_user_id)))
         if rejected or ex.deleted_at is not None:
+            common["source"] = source_svc.label(ex) if ex.source else source_svc.UNCONFIRMED_LABEL
             out.append(_e(key=f"e-x:{ex.id}", amts={"excluded": ex.amount}, counted=False,
                           reason="rejected" if rejected else "cancelled", status="Rejected" if rejected else "Cancelled",
                           at=ex.rejected_at if rejected else ex.deleted_at, note=ex.rejection_reason or "", **common))
             continue
-        amts = {"total": ex.amount, ("by_flat" if ex.paid_by_flat_id else "by_account"): ex.amount}
+        src = ex.source
+        src_label = source_svc.label(ex) if src else source_svc.UNCONFIRMED_LABEL
+        common["source"] = src_label
+        amts = {"total": ex.amount, {"flat": "by_flat", "society": "by_account"}.get(src, "to_confirm"): ex.amount}
         if ex.is_settled:
             amts["settled"] = ex.amount
         else:
@@ -377,7 +384,7 @@ def collect(db: Session) -> list[dict]:
             st = ex.settlement
             scommon = dict(cat="settlements", sub=ex.category or "general", sub_label=ex.category or "general",
                            date=st.settled_on, **who(ex.paid_by_flat_id), type="Settlement", detail=ex.description,
-                           note=st.note or "", by="admin")
+                           note=st.note or "", by="admin", source=src_label)
             if st.reverted_at is None:
                 key = "paidout" if ex.period_id else "paidout_nofund"
                 out.append(_e(key=f"s:{st.id}", ym=ym, amts={key: st.amount}, status="Settled", **scommon))
@@ -603,22 +610,22 @@ def block_projects(ctx: Ctx) -> dict:
 
 
 def block_expenses(ctx: Ctx) -> dict:
+    show_confirm = tot(ctx.entries, "to_confirm", cat="expenses", **ctx.kw()) != 0
+    measures = ["total", "settled", "unsettled", "by_flat", "by_account"] + (["to_confirm"] if show_confirm else [])
+    header = ["Category", "Total", "Settled", "Unsettled", "Paid by a flat", "Paid from society account"] + (
+        ["Source to confirm"] if show_confirm else [])
     rows = []
     for sub, label in _subs(ctx.entries, "expenses"):
         d = {"sub": sub}
-        rows.append([cell(label), num(ctx, "expenses", "total", drill=d), num(ctx, "expenses", "settled", drill=d),
-                     num(ctx, "expenses", "unsettled", drill=d), num(ctx, "expenses", "by_flat", drill=d),
-                     num(ctx, "expenses", "by_account", drill=d)])
-    total = [cell("Total", bold=True)] + [num(ctx, "expenses", m, bold=True)
-                                          for m in ("total", "settled", "unsettled", "by_flat", "by_account")]
+        rows.append([cell(label)] + [num(ctx, "expenses", m, drill=d) for m in measures])
+    total = [cell("Total", bold=True)] + [num(ctx, "expenses", m, bold=True) for m in measures]
     return {
         "id": "expenses", "title": "Expenses", "cat": "expenses",
-        "intro": "Approved building expenses. Rejected and cancelled expenses are never counted.",
+        "intro": "Approved building expenses, split by who paid: a flat (an advance, reimbursed later) or the society account. "
+                 "Rejected and cancelled expenses are never counted.",
         "tiles": [tile(ctx, "expenses", m) for m in ("total", "settled", "unsettled", "owed")],
-        "tables": [_table(["Category", "Total", "Settled", "Unsettled", "Paid by a flat", "Paid from Account Balance"], rows,
-                          total=total, tips=["", DEFS[("expenses", "total")], DEFS[("expenses", "settled")],
-                                             DEFS[("expenses", "unsettled")], DEFS[("expenses", "by_flat")],
-                                             DEFS[("expenses", "by_account")]])],
+        "tables": [_table(header, rows, total=total,
+                          tips=[""] + [DEFS[("expenses", m)] for m in measures])],
     }
 
 
@@ -702,6 +709,14 @@ def reconcile(db: Session, ctx: Ctx) -> dict:
           "Unsettled owner advances differ from the Balances page.")
     check("All expenses = ledger total", tot(E, "total", cat="expenses"), ledger_svc.expense_total(db),
           "Expense total differs from the ledger's counted expenses.")
+    check("Paid by a flat + society account + to confirm = all expenses",
+          tot(E, "by_flat", cat="expenses") + tot(E, "by_account", cat="expenses") + tot(E, "to_confirm", cat="expenses"),
+          tot(E, "total", cat="expenses"), "Some expense has no payment source classification.")
+    society_paid_out = sum(st.amount for st in db.scalars(
+        select(Settlement).join(Expense, Settlement.expense_id == Expense.id)
+        .where(Settlement.reverted_at.is_(None), Expense.counted(), Expense.payment_source == source_svc.SOCIETY)).all())
+    check("Society-paid expenses = their settlements", tot(E, "by_account", cat="expenses"), society_paid_out,
+          "A society-paid expense and its settlement differ (an expense may have been edited after it was settled).")
     check("Settled expenses = ledger settled total", tot(E, "settled", cat="expenses"),
           ledger_svc.expense_total(db, settled_only=True), "Settled expenses differ from the ledger.")
     check("Settled expenses = amounts paid out", tot(E, "settled", cat="expenses"),
@@ -868,7 +883,7 @@ def _detail_tables(db: Session, ctx: Ctx) -> list[dict]:
 # ---- drilldown ------------------------------------------------------------------------------------------------
 
 DRILL_COLUMNS = ("Date", "Flat", "Owner", "Type", "Detail", "Amount", "Mode", "UTR / reference", "Payee UPI ID",
-                 "Status", "Recorded by", "Recorded at (IST)", "Note")
+                 "Status", "Recorded by", "Recorded at (IST)", "Note", "Payment source")
 
 
 def drill(ctx: Ctx) -> dict:
@@ -920,7 +935,7 @@ def drill_row_values(e: dict, measure: str) -> list:
     return [format_date_or_blank(e["date"]), e["flat"], e["owner"], e["type"] + (f" - {e['sub_label']}" if e["sub_label"] and e["cat"] in ("corpus", "projects", "expenses", "settlements") else ""),
             e["detail"], row_amount(e, measure), e["mode"], e["ref"], e["vpa"],
             e["status"] if e["counted"] else f"Not counted ({e['status']})", e["by"],
-            _ist_stamp(e["at"]), e["note"]]
+            _ist_stamp(e["at"]), e["note"], e["source"]]
 
 
 def _ist_stamp(v) -> str:
@@ -1011,7 +1026,7 @@ def trend_export_table(tr: dict) -> dict:
 
 def drill_export_table(d: dict) -> dict:
     rows = [drill_row_values(e, d["measure"]) for e in d["all"]]
-    total = ["Total", "", "", "", "", d["total"], "", "", "", "", "", "", ""]
+    total = ["Total", "", "", "", "", d["total"], "", "", "", "", "", "", "", ""]
     return {"title": d["title"], "header": list(DRILL_COLUMNS), "rows": rows, "total": total}
 
 

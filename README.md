@@ -135,6 +135,22 @@ Open **http://localhost:8000** — username **`admin`**, password **`nest5admin`
 - **Version label:** `version: nest5-v7.2`. Code-only update from v7.1: no new packages, no migration (head stays `e5c1a7b9d204`).
 - Tests: `tests/test_v72_features.py`.
 
+### Who paid an expense: a flat or the society account (v7.5)
+
+- **Version label:** `version: nest5-v7.5`. **One migration, `d6a3f9b1c428`** (revises `b4e7c2a9d531`; new head); no new packages. Deploy: back up `nest5.db`, run the migration on a copy first, then `alembic upgrade head` (`./run-local.sh` does it).
+- **Two kinds of expense.** Every expense now records its **payment source** (`expenses.payment_source`):
+  - **A. Paid by a flat** (default): an owner advance. It is owed back until the admin settles it on Settlements; the Account Balance drops only when it is settled, exactly as before.
+  - **B. Paid from the society account:** nobody is owed. It is saved together with its settlement, so the **Account Balance drops at once**, it never appears under "Unsettled owner expenses", and no Settle / Revert button is shown for it. A **short note is required** (for example "Paid in cash from the office account"); it is stored as the settlement note.
+- **Admin Add expense** has a "Who paid?" choice (A pre-selected, flat required for A, note required for B). **Edit** has the same choice. All balance, month-closing and next-month-opening figures keep using the existing formulas, because a society expense simply owns a live settlement.
+- **Not enough balance?** B is refused with "Balance X cannot cover Y" and a card offers **Save as paid by a flat** (one click, nothing was saved yet).
+- **Switching.** Unsettled A to B settles it from the Account Balance (refused if the balance is too low). B to A reverts the settlement and puts the balance back; an owner-recorded advance cannot be moved to B; an A expense that was already reimbursed cannot become B, and its amount is locked until its settlement is reverted. Editing a B amount moves its settlement too (an increase must fit in the balance). Deleting a B expense removes the expense and its settlement, putting every figure back.
+- **Older data.** The migration sets `flat` on every expense that has a paying flat and **leaves the others empty (shown "To confirm")**. It touches no amount, settlement or balance. On the live copy this is **expense 5 (Watchman salary, 4,000, settled, no flat)**: Expenses shows a **Confirm payment source (N)** panel with it pre-selected as "Society account" (its settlement note is kept); the admin confirms with one click. **Nothing is confirmed automatically**, and confirming changes no figure (Account Balance 8,256, expenses 11,944 = 11,744 settled + 200 owed all stay). The Actions board gets a "Confirm payment source" item until it is done.
+- **Four existing problems fixed together:** (1) choosing "no flat" no longer fails with an error (empty values are read as empty); (2) editing the amount of an expense that already has a settlement now keeps the settlement in step (or is refused when the amount is locked) instead of silently leaving the Account Balance wrong; (3) the Settlements page can no longer revert a settlement of an expense with no flat (it would have raised the Account Balance with no record of why; change who paid on Expenses instead); (4) an expense without a month now gets the month of its date, or is refused with a clear message.
+- **Reports and exports show it.** Reports > Expenses splits **Paid by a flat** / **Paid from society account** (plus **Source to confirm** while any is unconfirmed); the reconciliation block adds two checks (flat + society + to-confirm = total; society expenses = their settlements); every expense and settlement drilldown has a **Payment source** column (also in the CSV / Excel / PDF exports). The raw CSV / Excel / JSON exports include `payment_source`; the Expenses PDF shows it in "Paid by". Activity and the audit log say "paid from the society account" / "paid by Flat X" (`confirm_source` and `switch_source` actions).
+- **Access.** Admin only: owners and tenants get 403 on every expense write route. Owners' own submitted expenses are always "paid by their flat".
+- **Backups.** A v7.5 JSON backup contains `payment_source`; v7.5 restores older dumps with the column empty (run the app once, or `backfill`, to fill flat rows). **v7.4 code refuses a v7.5 dump** (unknown column), and v7.4 code running on a migrated database keeps working (it ignores the column); after a downgrade (`alembic downgrade b4e7c2a9d531`) only the new column is dropped.
+- Tests: `tests/test_v75_payment_source.py` (cases T1-T17, T19, T21-T25 of `docs/expense-payment-source-test-plan.md` plus extras), `tests/test_v75_migration.py` (T18, T20: from scratch, up-down-up, after the startup safety net, over a v7.4-shaped copy of live-like data); older tests were adjusted for the new head, label and the required source field.
+
 ### Reports, settlement notes, optional sample data (v7.4)
 
 - **Version label:** `version: nest5-v7.4`. **No migration** (alembic head stays `b4e7c2a9d531`); no new packages; code-only upgrade.
@@ -168,6 +184,10 @@ Open **http://localhost:8000** — username **`admin`**, password **`nest5admin`
 - **L. Pay now footer.** An owner's payment counts the moment it is submitted (it is recorded against the due, Submitted by owner); the admin then verifies the UTR against the UPI statement and can Reject it, which makes the due reappear and shows it to the owner as Rejected. The sheet footer says exactly that: "Your payment is recorded right away against this due. The admin then checks the UTR against the UPI statement; if it can't be matched, the admin rejects it and the due comes back."
 - **Deploy:** unzip, keep `nest5.db`, `instance/`, `backups/`, `.env`, run `alembic upgrade head` (`./run-local.sh` does it) and restart with a single uvicorn worker.
 - Tests: `tests/test_v73_monthly.py`, `test_v73_job.py`, `test_v73_recurring.py`, `test_v73_payment_settings.py`, `test_v73_user_delete.py`, `test_v73_payee_report.py`, `test_v73_dashboard_layout.py`, `test_v73_date_format.py`, `test_v73_ist.py`, `test_flats.py`, `test_v73_migration.py` (migration from scratch, up-down-up, after the startup safety net, over v7.2-style data); the Pay now and due-date tests were updated for the simpler sheet and the 5th.
+
+### Upgrading from v7.4 (keep your `nest5.db`, `instance/`, `backups/`, `.env`)
+
+Unzip `nest5-ledger-v7.5.zip` into a new folder, copy `nest5.db`, `instance/`, `backups/` and `.env` over, then `./run-local.sh` (runs `alembic upgrade head`: one migration, `d6a3f9b1c428`, which adds one nullable column and marks expenses that have a paying flat as `flat`). Dry-run it first on a copy of the live database. Run a single uvicorn worker. No new packages. Afterwards, sign in as admin, open **Expenses** and confirm the older expense with no flat (expense 5) in the **Confirm payment source** panel; this is deliberate and never automatic.
 
 ### Upgrading from v7.3 (keep your `nest5.db`, `instance/`, `backups/`, `.env`)
 
@@ -242,6 +262,7 @@ Unzip `nest5-ledger-v7.zip` into a new folder, copy `nest5.db`, `instance/`, `ba
 | `/admin/recurring` | Recurring admin tasks: watchman salary, common EB, ... (v7.3, admin only) |
 | `/admin/payment-settings`, `/admin/payment-settings/history` | UPI ID / mobile / payee settings and their append-only history (v7.3, admin only) |
 | `/admin/reports` (+ `/drill`, `/export.csv`, `/export.xlsx`, `/export.pdf`) | Reports: consolidated summary, monthly trend, category detail, drilldown, exports (v7.4, admin only, read-only) |
+| `/expenses/{id}/confirm-source` (POST) | Confirm who paid an older expense (v7.5, admin only; changes no figure) |
 | `/settlements/{id}/note` (POST) | Edit a settlement's note (v7.4, admin only) |
 | `/admin/payee-report` (+ `/export.csv`, `/export.xlsx`, `/export.pdf`) | Payee / UPI audit report (v7.3, admin only, read-only) |
 | `/calendar` | Calendar: tasks, dues, events (v8; admin + owners) |

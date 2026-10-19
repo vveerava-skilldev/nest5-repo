@@ -417,7 +417,7 @@ def test_migration_from_scratch_and_repair_on_existing_rows(tmp_path):
     con = sqlite3.connect(db_file)
     cols = {row[1] for row in con.execute("PRAGMA table_info(expenses)")}
     assert {"status", "rejection_reason", "rejected_at", "rejected_by"} <= cols
-    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "b4e7c2a9d531"
+    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "d6a3f9b1c428"
     con.close()
     # Down and up again is clean
     assert _alembic(url, "downgrade", "b8e3f5a1d726").returncode == 0

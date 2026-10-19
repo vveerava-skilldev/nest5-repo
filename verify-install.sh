@@ -2,11 +2,12 @@
 # Run from nest5-ledger/:  bash verify-install.sh
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
-echo "Install folder: $ROOT  (expected build label: nest5-v7.4)"
-if ! grep -q 'nest5-v7.4' app/config.py; then echo "  WRONG VERSION: app/config.py is not nest5-v7.4"; fi
+echo "Install folder: $ROOT  (expected build label: nest5-v7.5)"
+if ! grep -q 'nest5-v7.5' app/config.py; then echo "  WRONG VERSION: app/config.py is not nest5-v7.5"; fi
 echo ""
 FILES=(
   requirements.txt alembic.ini alembic/env.py
+  alembic/versions/d6a3f9b1c428_expense_payment_source.py app/services/payment_source.py app/templates/_expense_source.html
   app/main.py scripts/seed.py run-local.sh
   scripts/reset_admin.py scripts/create_tenant.py app/services/tenant.py alembic/versions/d4b8f1a3c627_tenant_role.py app/routers/accounts.py app/routers/data_export.py
   alembic/versions/e7b3c9d2f4a1_users_rbac.py
