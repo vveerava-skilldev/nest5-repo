@@ -4,6 +4,7 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.dates import ist_today
 from app.models import (
     CorpusCampaign,
     CorpusCampaignShare,
@@ -55,7 +56,7 @@ def due_status(due: date | None, remaining: int, today: date | None = None) -> s
         return "paid"
     if due is None:
         return "open"
-    today = today or date.today()
+    today = today or ist_today()
     if due < today:
         return "overdue"
     if (due - today).days <= DUE_SOON_DAYS:

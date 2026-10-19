@@ -1,8 +1,8 @@
 """UPI QR payload + payee details for the owner "Pay now" sheet.
 
 UPI never reports back to the portal: the QR only carries the payee, amount and note for the
-payer's UPI app. Nothing is marked paid until the owner submits the pay form and the admin
-approves it as usual.
+payer's UPI app. A payment is recorded (and counts) the moment the owner submits the pay form; the admin
+verifies the UTR against the UPI statement afterwards and can reject it, which makes the due reappear.
 """
 import io
 import re

@@ -1,4 +1,4 @@
-"""v7.3 (in place): every date the app shows is dd-mm-yyyy; ISO stays only in form values, URLs, DB and the JSON backup."""
+"""v7.3 (in place): every date the app shows is dd-mm-yyyy and every time is IST; ISO / UTC stay only in form values, URLs, DB and the JSON backup."""
 import json
 import shutil
 import subprocess
@@ -17,14 +17,14 @@ def test_central_helpers():
     assert dates.format_date(date(2026, 10, 5)) == "05-10-2026"
     assert dates.format_date("2026-01-02") == "02-01-2026" and dates.format_date(None) == "—"
     assert dates.format_date(datetime(2026, 10, 5, 23, 59)) == "05-10-2026"
-    assert dates.format_datetime(datetime(2026, 10, 5, 9, 7, 33)) == "05-10-2026 09:07"
+    assert dates.format_datetime(datetime(2026, 10, 5, 9, 7, 33)) == "05-10-2026 14:37 IST"  # stored UTC -> IST
     assert dates.format_weekday_date(date(2026, 10, 5)) == "Mon 05-10-2026"
     assert dates.due_hint(date(2026, 10, 5)) == "due 05-10-2026" and dates.due_hint(None) == ""
     assert dates.format_date_or_blank(None) == "" and dates.format_date_or_blank(date(2026, 3, 1)) == "01-03-2026"
     assert dates.format_ist(datetime(2026, 10, 19, 11, 7, tzinfo=timezone.utc)) == "Mon 19-10-2026, 4:37 PM IST"
     assert dates.format_ist_stamp(datetime(2026, 10, 19, 11, 7, tzinfo=timezone.utc)) == "19-10-2026 16:37 IST"
     assert dates.display_dates_in_text('{"paid_on": "2026-10-05", "at": "2026-10-05T09:07:33.123456", "n": 12}') == \
-        '{"paid_on": "05-10-2026", "at": "05-10-2026 09:07", "n": 12}'
+        '{"paid_on": "05-10-2026", "at": "05-10-2026 14:37 IST", "n": 12}'
     assert dates.display_dates_in_text(None) == "" and dates.display_dates_in_text("no dates 2026-10") == "no dates 2026-10"
     # form values / DB helpers stay ISO
     assert dates.date_to_iso(date(2026, 10, 5)) == "2026-10-05" and dates.parse_iso_date("2026-10-05") == date(2026, 10, 5)
@@ -47,6 +47,7 @@ SCAN = r'''
 import csv, io, re, zipfile
 import openpyxl
 from datetime import date, timedelta
+from app.dates import ist_today
 OWNER = "asrk.sastry"
 owner, mani = login(OWNER), login("manikyamba")
 tflat = db.scalar(select(Flat).where(Flat.number == "101"))
@@ -58,7 +59,7 @@ by_no = {f.number: f.id for f in db.scalars(select(Flat)).all()}
 octo = db.scalar(select(LedgerPeriod).where(LedgerPeriod.year == 2026, LedgerPeriod.month == 10))
 mp = db.scalar(select(MaintenancePayment).where(MaintenancePayment.period_id == octo.id, MaintenancePayment.flat_id == oflat))
 admin.post(f"/maintenance/{mp.id}/revert")
-today = date.today().isoformat()
+today = ist_today().isoformat()
 admin.post("/projects", data={"name": "Roof", "total_cost": "25000", "start_date": "2026-09-01", "due_date": "2026-09-20"})
 admin.post("/corpus/campaigns", data={"name": "Lift", "target_amount": "50000", "due_date": "2026-12-15"})
 admin.post("/calendar/events", data={"title": "Owners meeting", "event_type": "Meeting", "event_date": "2026-10-25", "end_date": "2026-10-26", "visible_to_owners": "1"})
@@ -79,7 +80,8 @@ admin.post("/expenses", data={"description": "Bulbs", "category": "Common", "amo
 
 ISO = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 MON = "(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*"
-OTHER = [re.compile(rf"\b\d{{1,2}} {MON},? \d{{4}}"), re.compile(rf"\b{MON} \d{{1,2}},? \d{{4}}"), re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b")]
+NAKED_TIME = re.compile(r"\b\d{2}-\d{2}-\d{4} \d{1,2}:\d{2}(?! ?(?:IST|[AP]M))")
+OTHER = [NAKED_TIME, re.compile(rf"\b\d{{1,2}} {MON},? \d{{4}}"), re.compile(rf"\b{MON} \d{{1,2}},? \d{{4}}"), re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b")]
 def visible(html):
     h = re.sub(r"<(script|style)\b.*?</\1>", " ", html, flags=re.S)
     attrs = re.findall(r'\b(?:title|placeholder|alt|aria-label)="([^"]*)"', h)
@@ -160,7 +162,11 @@ out["csv_bad"] = csv_bad
 mpay = z.read("maintenance_payments.csv").decode().splitlines()
 hdr = mpay[0].split(",")
 out["csv_paid_on"] = sorted({r.split(",")[hdr.index("paid_on")] for r in mpay[1:] if r.split(",")[hdr.index("paid_on")]})[:3]
-out["csv_readme"] = "dd-mm-yyyy" in z.read("README.txt").decode()
+readme = z.read("README.txt").decode()
+out["csv_readme"] = "dd-mm-yyyy" in readme and "IST" in readme and "UTC" in readme and "as stored: UTC" not in readme
+login_col = z.read("users.csv").decode().splitlines()
+out["csv_users_ist"] = any(re.search(r"\d\d-\d\d-\d{4} \d\d:\d\d IST", ln) for ln in login_col[1:])
+out["xlsx_datetime_cells"] = sorted({t[1] for t in cells if isinstance(t, tuple) and "hh:mm" in t[1]})
 dump = admin.get("/admin/export/json").json()
 rows = dump["tables"]["maintenance_payments"]["rows"]
 out["json_iso"] = [bool(ISO.fullmatch(r["paid_on"])) for r in rows if r["paid_on"]][:3]
@@ -179,7 +185,8 @@ out["pdfs"] = [admin.get("/admin/payee-report/export.pdf?status=all").status_cod
     assert out["xlsx_about"] and ("IST" in str(out["xlsx_about"][0]))
     assert out["csv_bad"] == {}
     assert out["csv_paid_on"] and all(len(v) == 10 and v[2] == "-" and v[5] == "-" for v in out["csv_paid_on"])
-    assert out["csv_readme"] is True
+    assert out["csv_readme"] is True and out["csv_users_ist"] is True
+    assert out["xlsx_datetime_cells"] == ['dd-mm-yyyy hh:mm "IST"']
     assert out["json_iso"] and all(out["json_iso"]) and out["json_exported_at_iso"] is True
     assert out["payee_csv"][0] == [] and out["payee_csv"][1] is True
     assert out["payee_xlsx"] == [] and out["payee_xlsx_generated"] is True

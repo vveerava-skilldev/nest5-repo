@@ -1,4 +1,5 @@
 """v7.1: admin empty states, Actions board (Mark reviewed, tidy list), owner payment rejection."""
+from app.dates import ist_today
 import json
 import os
 import re
@@ -206,7 +207,7 @@ def _owner_project_payment(owner, db, project_name, flat_id, amount=100):
     db.expire_all()
     project = db.scalar(select(Project).where(Project.name == project_name))
     pp = db.scalar(select(ProjectPayment).where(ProjectPayment.project_id == project.id, ProjectPayment.flat_id == flat_id))
-    r = owner.post("/owner/projects/pay", data={"share_id": pp.id, "amount": amount, "paid_on": date.today().isoformat(),
+    r = owner.post("/owner/projects/pay", data={"share_id": pp.id, "amount": amount, "paid_on": ist_today().isoformat(),
                                                 "payment_mode": "Cash"}, follow_redirects=False)
     assert "owner_msg" in r.headers["location"], r.headers["location"]
     db.expire_all()
@@ -435,7 +436,7 @@ def test_reject_owner_corpus_payment_updates_goal_progress(seeded_db, admin_clie
     cid = camp.id
     try:
         before = totals(seeded_db, [flats["201"]])
-        owner.post("/corpus/pay", data={"target": f"{flats['201']}:{cid}", "amount": "1234", "paid_on": date.today().isoformat(),
+        owner.post("/corpus/pay", data={"target": f"{flats['201']}:{cid}", "amount": "1234", "paid_on": ist_today().isoformat(),
                                         "payment_mode": "Cash"})
         seeded_db.expire_all()
         cp = seeded_db.scalar(select(CorpusPayment).where(CorpusPayment.campaign_id == cid))

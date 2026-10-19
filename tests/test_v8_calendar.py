@@ -1,4 +1,5 @@
 """v8: in-portal Calendar (service, owner visibility, admin-only events) and its migration."""
+from app.dates import ist_today
 import html
 import json
 import os
@@ -54,7 +55,7 @@ def _purge_events(db):
 
 
 def _add_event(admin_client, **over):
-    data = {"title": "Owners meeting", "event_type": "Meeting", "event_date": date.today().isoformat(),
+    data = {"title": "Owners meeting", "event_type": "Meeting", "event_date": ist_today().isoformat(),
             "visible_to_owners": "1"}
     data.update(over)
     return admin_client.post("/calendar/events", data=data, follow_redirects=False)
@@ -104,7 +105,7 @@ def test_no_next_due_means_no_occurrence():
 
 def test_month_helpers():
     assert cal.parse_month("2026-02") == (2026, 2)
-    today = date.today()
+    today = ist_today()
     for bad in ("", "x", "2026-13", "1999-01", "2026", None):
         assert cal.parse_month(bad) == (today.year, today.month)
     assert cal.shift_month(2026, 12, 1) == (2027, 1) and cal.shift_month(2026, 1, -1) == (2025, 12)
@@ -115,7 +116,7 @@ def test_month_helpers():
 
 
 def test_asset_tasks_and_completed_logs_in_month_items(seeded_db):
-    today = date.today()
+    today = ist_today()
     asset = schedule_svc.get_or_create_asset(seeded_db, "Cal test pump")
     task = AssetMaintenanceSchedule(asset_id=asset.id, asset="Cal test pump", task="Greasing", frequency=F.WEEKLY,
                                     next_due_on=today - timedelta(days=2), last_done_on=today - timedelta(days=9))
@@ -165,7 +166,7 @@ def test_nav_item_and_page_for_admin_and_owner(seeded_db, admin_client, owner_cl
 
 
 def test_navigation_month_picker_today_and_summary(seeded_db, admin_client):
-    today = date.today()
+    today = ist_today()
     page = admin_client.get(f"/calendar?m={_month_key(today)}").text
     assert f'href="/calendar?m={cal.month_key(*cal.shift_month(today.year, today.month, -1))}"' in page
     assert f'href="/calendar?m={cal.month_key(*cal.shift_month(today.year, today.month, 1))}"' in page
@@ -182,7 +183,7 @@ def test_navigation_month_picker_today_and_summary(seeded_db, admin_client):
 
 def test_dates_are_dd_mm_yyyy_and_agenda_groups_by_date(seeded_db, admin_client):
     _purge_events(seeded_db)
-    day = date.today()
+    day = ist_today()
     _add_event(admin_client, title="Agenda A", event_date=day.isoformat())
     _add_event(admin_client, title="Agenda B", event_date=day.isoformat(), start_time="10:00")
     page = admin_client.get("/calendar").text
@@ -217,7 +218,7 @@ def _set_paid(db, flat_no, paid, today):
 
 
 def test_maintenance_item_owner_sees_only_own_flats(seeded_db, admin_client, owner_client):
-    today = date.today()
+    today = ist_today()
     if _period(seeded_db, today) is None:
         pytest.skip("current month not opened in the seed")
     _set_paid(seeded_db, "201", False, today)
@@ -236,7 +237,7 @@ def test_maintenance_item_owner_sees_only_own_flats(seeded_db, admin_client, own
 
 
 def test_past_unpaid_maintenance_is_overdue(seeded_db):
-    today = date.today()
+    today = ist_today()
     prev_y, prev_m = cal.shift_month(today.year, today.month, -1)
     period = seeded_db.scalar(select(LedgerPeriod).where(LedgerPeriod.year == prev_y, LedgerPeriod.month == prev_m))
     if period is None:
@@ -256,7 +257,7 @@ def test_past_unpaid_maintenance_is_overdue(seeded_db):
 
 
 def test_corpus_and_project_due_dates_without_leaking_other_flats(seeded_db, admin_client, owner_client):
-    today = date.today()
+    today = ist_today()
     due = today.isoformat()
     r = admin_client.post("/corpus/campaigns", data={"name": "Cal lift fund", "target_amount": "50000", "due_date": due},
                           follow_redirects=False)
@@ -291,7 +292,7 @@ def test_corpus_and_project_due_dates_without_leaking_other_flats(seeded_db, adm
 def test_owner_without_share_in_a_goal_does_not_see_it(seeded_db, admin_client, owner_client):
     from app.models import CorpusCampaignShare, CorpusCampaign
 
-    today = date.today()
+    today = ist_today()
     admin_client.post("/corpus/campaigns", data={"name": "Cal no-share goal", "target_amount": "10000",
                                                  "due_date": today.isoformat()})
     seeded_db.expire_all()
@@ -309,7 +310,7 @@ def test_owner_without_share_in_a_goal_does_not_see_it(seeded_db, admin_client, 
 
 def test_admin_creates_edits_deletes_event_with_audit(seeded_db, admin_client):
     _purge_events(seeded_db)
-    day = date.today()
+    day = ist_today()
     form = admin_client.get("/calendar/events/new")
     assert form.status_code == 200 and 'name="title"' in form.text and 'name="visible_to_owners"' in form.text
     assert 'value="1" checked' in form.text  # visible to owners by default
@@ -349,7 +350,7 @@ def test_admin_creates_edits_deletes_event_with_audit(seeded_db, admin_client):
 
 def test_event_validation(seeded_db, admin_client):
     _purge_events(seeded_db)
-    day = date.today()
+    day = ist_today()
     cases = [
         {"title": "  "},
         {"event_date": ""},
@@ -376,7 +377,7 @@ def test_owner_cannot_manage_events(seeded_db, admin_client, owner_client):
     _purge_events(seeded_db)
     _add_event(admin_client, title="Locked event")
     ev = seeded_db.scalar(select(CalendarEvent))
-    day = date.today().isoformat()
+    day = ist_today().isoformat()
     assert owner_client.get("/calendar/events/new").status_code == 403
     assert owner_client.get(f"/calendar/events/{ev.id}/edit").status_code == 403
     assert owner_client.post("/calendar/events", data={"title": "Hack", "event_date": day}).status_code == 403
@@ -399,7 +400,7 @@ def test_anonymous_cannot_use_calendar(seeded_db):
 
 def test_hidden_events_are_not_shown_to_owners(seeded_db, admin_client, owner_client):
     _purge_events(seeded_db)
-    day = date.today().isoformat()
+    day = ist_today().isoformat()
     _add_event(admin_client, title="Public coffee morning", event_date=day, visible_to_owners="1")
     _add_event(admin_client, title="Committee only budget talk", event_date=day, visible_to_owners="", notes="secret notes")
     owner_page = owner_client.get("/calendar").text
@@ -419,7 +420,7 @@ def test_hidden_events_are_not_shown_to_owners(seeded_db, admin_client, owner_cl
 
 def test_summary_counts_events_and_overdue(seeded_db, admin_client):
     _purge_events(seeded_db)
-    today = date.today()
+    today = ist_today()
     base = cal.summary(cal.month_items(seeded_db, today.year, today.month, cal.Viewer(is_admin=True), today))
     _add_event(admin_client, title="Count me")
     after = cal.summary(cal.month_items(seeded_db, today.year, today.month, cal.Viewer(is_admin=True), today))

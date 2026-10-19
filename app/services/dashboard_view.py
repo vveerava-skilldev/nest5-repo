@@ -9,6 +9,7 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
+from app.dates import ist_today
 from app.models import User
 from app.services import upi as upi_svc
 
@@ -79,7 +80,7 @@ def build_simple(
     *, reminders: dict, board_rows: list[dict], balances: dict, period, pay_key: str, show_all: bool,
     advances: dict | None = None, today: date | None = None, payee: dict | None = None,
 ) -> dict:
-    today = today or date.today()
+    today = today or ist_today()
     dues = _due_rows(reminders, payee)
     visible = dues if show_all else dues[:VISIBLE_DUES]
     selected = next((d for d in dues if d["key"] and d["key"] == pay_key), None) if pay_key else None

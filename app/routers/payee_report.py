@@ -1,7 +1,6 @@
 """Admin-only Payee / UPI audit report: read-only, filterable, exportable (CSV / Excel / PDF)."""
 import csv
 import io
-from datetime import datetime
 from xml.sax.saxutils import escape
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -9,7 +8,7 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dates import format_date, format_ist, format_ist_stamp
+from app.dates import format_date, format_ist, format_ist_stamp, ist_now
 from app.routers.web import templates
 from app.services import payee_report as report_svc
 from app.services.access import is_admin
@@ -69,7 +68,7 @@ def _download(content: bytes, name: str, mime: str) -> Response:
 
 
 def _stamp() -> str:
-    return datetime.utcnow().strftime("%Y%m%d-%H%M")
+    return ist_now().strftime("%Y%m%d-%H%M")
 
 
 @router.get(REPORT_URL + "/export.csv")

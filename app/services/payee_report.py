@@ -30,7 +30,7 @@ from app.models import (
     SubmissionRejection,
     User,
 )
-from app.dates import format_date_or_blank
+from app.dates import format_date_or_blank, to_ist
 from app.services import payment_details as pay_svc
 
 NO_UPI = "No UPI / cash-bank"
@@ -163,7 +163,7 @@ def collect_all(db: Session) -> list[dict]:
         rtype = REJECT_TYPES.get(rj.record_type)
         if rtype is None:
             continue
-        rows.append(_row(kind="rejection", rid=rj.id, when=rj.paid_on or (rj.rejected_at.date() if rj.rejected_at else None),
+        rows.append(_row(kind="rejection", rid=rj.id, when=rj.paid_on or (to_ist(rj.rejected_at).date() if rj.rejected_at else None),
                          flat=flats.get(rj.flat_id), rtype=rtype, detail=rj.summary or TYPES[rtype], amount=rj.amount,
                          mode=None, ref=None, status="rejected", src=rj,
                          by=f"{_by(users.get(rj.submitted_by_user_id))}; rejected by {rj.rejected_by or 'admin'}",

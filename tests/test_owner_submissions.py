@@ -1,3 +1,4 @@
+from app.dates import ist_today
 import re
 from datetime import date, timedelta
 
@@ -78,7 +79,7 @@ def test_owner_cannot_submit_for_other_flats(owner_client, seeded_db):
     flats = _flats(seeded_db)
     oct_p = _oct(seeded_db)
     other = flats["301"]
-    today = date.today().isoformat()
+    today = ist_today().isoformat()
     posts = [
         ("/owner/maintenance", {"flat_id": other, "period_id": oct_p.id, "paid_on": today, "amount": "1000"}),
         (
@@ -266,7 +267,7 @@ def test_legacy_corpus_item_pay_goes_to_general_corpus(owner_client, seeded_db):
 
 def test_campaign_partial_payments_and_totals(admin_client, owner_client, seeded_db):
     flats = _flats(seeded_db)
-    due = date.today() + timedelta(days=30)
+    due = ist_today() + timedelta(days=30)
     campaign = _create_campaign(admin_client, seeded_db, "Painting 2026", 100000, due)
     summary = campaigns_svc.campaign_summary(seeded_db, campaign)
     assert [r["share"] for r in summary["rows"]] == [20000] * 5
@@ -278,7 +279,7 @@ def test_campaign_partial_payments_and_totals(admin_client, owner_client, seeded
     def pay(amount, flat_id=flats["201"]):
         return owner_client.post(
             f"/corpus/campaigns/{campaign.id}/pay",
-            data={"flat_id": flat_id, "amount": str(amount), "paid_on": date.today().isoformat(), "payment_mode": "UPI", "payment_note": "UTR123456789"},
+            data={"flat_id": flat_id, "amount": str(amount), "paid_on": ist_today().isoformat(), "payment_mode": "UPI", "payment_note": "UTR123456789"},
             follow_redirects=False,
         )
 
@@ -326,8 +327,8 @@ def test_campaign_partial_payments_and_totals(admin_client, owner_client, seeded
 
 def test_reminders_highlight_overdue_and_due_soon(admin_client, owner_client, seeded_db):
     flats = _flats(seeded_db)
-    overdue = _create_campaign(admin_client, seeded_db, "Overdue drive", 5000, date.today() - timedelta(days=2))
-    soon = _create_campaign(admin_client, seeded_db, "Soon drive", 5000, date.today() + timedelta(days=3))
+    overdue = _create_campaign(admin_client, seeded_db, "Overdue drive", 5000, ist_today() - timedelta(days=2))
+    soon = _create_campaign(admin_client, seeded_db, "Soon drive", 5000, ist_today() + timedelta(days=3))
 
     rem = reminders_svc.reminders_for_flats(seeded_db, [flats["201"]])
     statuses = {i["label"]: i["status"] for i in rem["items"] if i["kind"] == "Corpus"}
@@ -404,10 +405,10 @@ def test_cancel_request_flow(admin_client, owner_client, seeded_db, set_password
     assert "error=" in again.headers["location"]
 
     # Reject keeps the record; approve on a campaign payment removes it.
-    campaign = _create_campaign(admin_client, seeded_db, "Cancel drive", 5000, date.today() + timedelta(days=20))
+    campaign = _create_campaign(admin_client, seeded_db, "Cancel drive", 5000, ist_today() + timedelta(days=20))
     owner_client.post(
         f"/corpus/campaigns/{campaign.id}/pay",
-        data={"flat_id": flats["201"], "amount": "400", "paid_on": date.today().isoformat(), "payment_note": "UTR123456789"},
+        data={"flat_id": flats["201"], "amount": "400", "paid_on": ist_today().isoformat(), "payment_note": "UTR123456789"},
     )
     seeded_db.expire_all()
     cp = seeded_db.scalar(select(CorpusPayment).where(CorpusPayment.campaign_id == campaign.id))

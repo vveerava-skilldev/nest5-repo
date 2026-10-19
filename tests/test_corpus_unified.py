@@ -1,4 +1,5 @@
 """One corpus picture: collections (incl. General corpus) everywhere, Payments tabs, overview pages."""
+from app.dates import ist_today
 import os
 import sqlite3
 import subprocess
@@ -56,7 +57,7 @@ def test_partial_corpus_payment_shows_everywhere_counted_once(admin_client, seed
 
     r = admin_client.post(
         "/corpus/campaigns",
-        data={"name": "Lift upgrade", "target_amount": "50000", "due_date": (date.today() + timedelta(days=20)).isoformat()},
+        data={"name": "Lift upgrade", "target_amount": "50000", "due_date": (ist_today() + timedelta(days=20)).isoformat()},
         follow_redirects=False,
     )
     assert r.status_code == 303
@@ -71,7 +72,7 @@ def test_partial_corpus_payment_shows_everywhere_counted_once(admin_client, seed
 
     r = owner.post(
         "/corpus/pay",
-        data={"target": f"{flats['101']}:{campaign.id}", "amount": "4000", "paid_on": date.today().isoformat(), "payment_mode": "UPI", "payment_note": "UTR123456789"},
+        data={"target": f"{flats['101']}:{campaign.id}", "amount": "4000", "paid_on": ist_today().isoformat(), "payment_mode": "UPI", "payment_note": "UTR123456789"},
         follow_redirects=False,
     )
     assert r.status_code == 303 and "msg=" in r.headers["location"], r.headers["location"]
@@ -102,11 +103,11 @@ def test_partial_corpus_payment_shows_everywhere_counted_once(admin_client, seed
 
     # Owners cannot pay for a flat that is not theirs; overpaying is refused.
     assert owner.post(
-        "/corpus/pay", data={"target": f"{flats['201']}:{campaign.id}", "amount": "100", "paid_on": date.today().isoformat()},
+        "/corpus/pay", data={"target": f"{flats['201']}:{campaign.id}", "amount": "100", "paid_on": ist_today().isoformat()},
         follow_redirects=False,
     ).status_code == 403
     too_much = owner.post(
-        "/corpus/pay", data={"target": f"{flats['101']}:{campaign.id}", "amount": "6001", "paid_on": date.today().isoformat()},
+        "/corpus/pay", data={"target": f"{flats['101']}:{campaign.id}", "amount": "6001", "paid_on": ist_today().isoformat()},
         follow_redirects=False,
     )
     assert "error=" in too_much.headers["location"]

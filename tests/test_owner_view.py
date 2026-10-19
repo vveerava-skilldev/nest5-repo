@@ -1,4 +1,5 @@
 """Owner view: menu order, Payments tabs, building-wide view toggle, insights, flat PDF."""
+from app.dates import ist_today
 import re
 from datetime import date
 
@@ -91,7 +92,7 @@ def test_insights_data_stays_but_page_has_no_charts(seeded_db, owner_client):
     paid = sum(mp.amount for mp in seeded_db.scalars(
         select(MaintenancePayment).where(MaintenancePayment.flat_id == flats["201"],
                                          MaintenancePayment.is_paid.is_(True))).all()
-        if mp.paid_on and (date.today().year * 12 + date.today().month) - (mp.paid_on.year * 12 + mp.paid_on.month) < 12)
+        if mp.paid_on and (ist_today().year * 12 + ist_today().month) - (mp.paid_on.year * 12 + mp.paid_on.month) < 12)
     assert sum(data["trend"]["maintenance"]) == paid
     assert len(data["status"]["labels"]) == len(data["status"]["paid"]) == len(data["status"]["pending"])
 

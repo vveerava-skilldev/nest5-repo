@@ -15,7 +15,7 @@ from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session
 
 from app.database import Base
-from app.dates import display_dates_in_text, format_date, format_datetime, format_ist_stamp
+from app.dates import display_dates_in_text, format_date, format_datetime, format_ist_stamp, to_ist
 from app.models import entities  # noqa: F401  (registers every table on Base.metadata)
 
 DUMP_FORMAT = "nest5-ledger-dump"
@@ -106,10 +106,11 @@ def build_xlsx(db: Session) -> bytes:
     info.append(["Nest5 Ledger export"])
     info["A1"].font = Font(bold=True, size=14)
     info.append(["Exported at", format_ist_stamp()])
+    info.append(["Times", "All date-times are India time (IST, UTC+5:30); they are stored as UTC. Dates are dd-mm-yyyy."])
     info.append(["Schema version", schema_version(db) or "—"])
     info.append([])
     info.append(["Sheet", "Rows"])
-    info["A5"].font = info["B5"].font = Font(bold=True)
+    info["A6"].font = info["B6"].font = Font(bold=True)
     for t in tables():
         cols = _visible_columns(t)
         ws = wb.create_sheet(readable_table(t.name))
@@ -126,6 +127,8 @@ def build_xlsx(db: Session) -> bytes:
                     v = v.value
                 elif isinstance(v, bool):
                     v = "Yes" if v else "No"
+                elif isinstance(v, datetime):
+                    v = to_ist(v).replace(tzinfo=None)
                 elif c.name.endswith("_json") and isinstance(v, str):
                     v = display_dates_in_text(v)
                 out.append(v)
@@ -133,7 +136,7 @@ def build_xlsx(db: Session) -> bytes:
         for idx, c in enumerate(cols, start=1):
             letter = get_column_letter(idx)
             if isinstance(c.type, sa.DateTime):
-                fmt = "dd-mm-yyyy hh:mm"
+                fmt = 'dd-mm-yyyy hh:mm "IST"'
             elif isinstance(c.type, sa.Date):
                 fmt = "dd-mm-yyyy"
             else:
@@ -182,7 +185,8 @@ def build_csv_zip(db: Session) -> bytes:
         zf.writestr(
             "README.txt",
             "Nest5 Ledger CSV export — one file per table, header row = column names.\n"
-            "Dates are dd-mm-yyyy (timestamps dd-mm-yyyy HH:MM, as stored: UTC), booleans 1/0,\n"
+            "Dates are dd-mm-yyyy. Timestamps are India time, dd-mm-yyyy HH:MM IST (UTC+5:30; the database stores UTC),\n"
+            "booleans 1/0,\n"
             "empty cell = NULL. Password hashes are omitted; use the JSON dump for a full restore.\n",
         )
     return buf.getvalue()
@@ -196,7 +200,7 @@ def build_json_dump(db: Session) -> dict:
         "format": DUMP_FORMAT,
         "format_version": DUMP_FORMAT_VERSION,
         "schema_version": schema_version(db),
-        "exported_at": datetime.now().isoformat(timespec="seconds"),
+        "exported_at": datetime.utcnow().isoformat(timespec="seconds"),  # UTC, like every stored time
         "tables": {},
     }
     for t in tables():

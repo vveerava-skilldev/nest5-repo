@@ -3,7 +3,7 @@
 {% block title %}My submissions — {{ portal_name }}{% endblock %}
 {% block content %}
 <h2>My submissions</h2>
-<p style="color:var(--muted)">Payments and expenses you recorded. You can ask the admin to cancel one; it keeps counting until the admin approves.</p>
+<p style="color:var(--muted)">Payments and expenses you recorded. A payment counts as soon as you submit it; the admin then verifies it, and if it can't be matched the admin rejects it (shown here as Rejected) and the due comes back. You can ask the admin to cancel one; it keeps counting until the admin approves.</p>
 {% include "_flash.html" %}
 <div class="card">
   <table>

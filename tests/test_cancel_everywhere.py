@@ -1,4 +1,5 @@
 """An approved cancel (or admin revert) must take the amount out of every total, everywhere."""
+from app.dates import ist_today
 import re
 from datetime import date, timedelta
 
@@ -191,7 +192,7 @@ def test_cancel_corpus_payment_removed_everywhere(admin_client, seeded_db, set_p
     owner = _owner(seeded_db, set_password)
     flats = _flats(seeded_db)
     r = admin_client.post("/corpus/campaigns", data={"name": "Cancel drive", "target_amount": "50000",
-                                                     "due_date": (date.today() + timedelta(days=20)).isoformat()},
+                                                     "due_date": (ist_today() + timedelta(days=20)).isoformat()},
                           follow_redirects=False)
     assert r.status_code == 303
     seeded_db.expire_all()
@@ -199,7 +200,7 @@ def test_cancel_corpus_payment_removed_everywhere(admin_client, seeded_db, set_p
     try:
         before = totals(seeded_db, [flats["101"]])
         r = owner.post("/corpus/pay", data={"target": f"{flats['101']}:{campaign.id}", "amount": "1234",
-                                            "paid_on": date.today().isoformat(), "payment_mode": "UPI", "payment_note": "UTR123456789"}, follow_redirects=False)
+                                            "paid_on": ist_today().isoformat(), "payment_mode": "UPI", "payment_note": "UTR123456789"}, follow_redirects=False)
         assert "msg=" in r.headers["location"]
         seeded_db.expire_all()
         cp = seeded_db.scalar(select(CorpusPayment).where(CorpusPayment.campaign_id == campaign.id))

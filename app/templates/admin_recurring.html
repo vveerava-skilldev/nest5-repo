@@ -93,10 +93,10 @@
   <h3 style="margin-top:0">Recently done</h3>
   <div class="table-scroll">
   <table>
-    <thead><tr><th>Task</th><th>Month</th><th>Done on</th><th>Amount</th><th>Note</th><th>By</th></tr></thead>
+    <thead><tr><th>Task</th><th>Month</th><th>Done on</th><th>Recorded</th><th>Amount</th><th>Note</th><th>By</th></tr></thead>
     <tbody>
     {% for o in done_rows %}
-      <tr><td>{{ o.task.title }}</td><td>{{ '%02d'|format(o.month) }}-{{ o.year }}</td><td>{{ o.done_on|format_date }}</td><td>{% if o.amount is not none %}₹{{ o.amount }}{% else %}—{% endif %}</td><td>{{ o.note or '—' }}</td><td>{{ o.done_by or '—' }}</td></tr>
+      <tr><td>{{ o.task.title }}</td><td>{{ '%02d'|format(o.month) }}-{{ o.year }}</td><td>{{ o.done_on|format_date }}</td><td>{{ o.done_at|format_datetime if o.done_at else '—' }}</td><td>{% if o.amount is not none %}₹{{ o.amount }}{% else %}—{% endif %}</td><td>{{ o.note or '—' }}</td><td>{{ o.done_by or '—' }}</td></tr>
     {% endfor %}
     </tbody>
   </table>

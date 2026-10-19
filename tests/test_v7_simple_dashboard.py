@@ -1,4 +1,5 @@
 """v7: Simple / Detailed owner dashboard, saved default view, pay sheet, UPI link."""
+from app.dates import ist_today
 import html
 import os
 import re
@@ -32,7 +33,7 @@ def _flat_id(db, number):
 
 
 def _current_period(db):
-    today = date.today()
+    today = ist_today()
     return db.scalar(select(LedgerPeriod).where(LedgerPeriod.year == today.year, LedgerPeriod.month == today.month)) \
         or db.scalar(select(LedgerPeriod).order_by(LedgerPeriod.year.desc(), LedgerPeriod.month.desc()))
 
@@ -47,7 +48,7 @@ def _unpay(db, flat_number, period=None):
 
 
 def _goal(admin_client, db, name="Lift fund v7", target=50000):
-    due = (date.today() + timedelta(days=15)).isoformat()
+    due = (ist_today() + timedelta(days=15)).isoformat()
     r = admin_client.post("/corpus/campaigns", data={"name": name, "target_amount": str(target), "due_date": due},
                           follow_redirects=False)
     assert r.status_code == 303
@@ -58,7 +59,7 @@ def _goal(admin_client, db, name="Lift fund v7", target=50000):
 
 def _project(admin_client, db, name="Roof v7", total="25000"):
     r = admin_client.post("/projects", data={"name": name, "total_cost": total,
-                                             "due_date": (date.today() + timedelta(days=5)).isoformat()},
+                                             "due_date": (ist_today() + timedelta(days=5)).isoformat()},
                           follow_redirects=False)
     assert r.status_code == 303
     db.expire_all()
@@ -174,7 +175,7 @@ def test_owner_cannot_open_pay_sheet_or_pay_for_other_flat(seeded_db, admin_clie
     page = owner_client.get(f"/?view=simple&pay=m-{period.id}-{other}").text
     assert "sv-sheet" not in page and "Flat 301" not in page
     r = owner_client.post("/owner/maintenance", data={
-        "flat_id": other, "period_id": period.id, "paid_on": date.today().isoformat(),
+        "flat_id": other, "period_id": period.id, "paid_on": ist_today().isoformat(),
         "back": "/?view=simple"}, follow_redirects=False)
     assert r.status_code == 403
     assert owner_client.get(f"/upi/qr.svg?flat_id={other}&amount=100&note=x").status_code == 403
@@ -223,8 +224,9 @@ def test_pay_maintenance_through_sheet(seeded_db, owner_client):
     sheet = owner_client.get(href).text
     assert "sv-sheet" in sheet and 'action="/owner/maintenance"' in sheet
     assert f'name="flat_id" value="{mp.flat_id}"' in sheet and f'value="{mp.amount}"' in sheet
-    assert f'name="paid_on" value="{date.today().isoformat()}"' in sheet and 'name="payment_note"' in sheet
-    assert "nothing is marked paid until then" in sheet
+    assert f'name="paid_on" value="{ist_today().isoformat()}"' in sheet and 'name="payment_note"' in sheet
+    assert "Your payment is recorded right away against this due" in sheet and "the due comes back" in sheet
+    assert "nothing is marked paid" not in sheet
     r = owner_client.post("/owner/maintenance", data={
         "flat_id": mp.flat_id, "period_id": mp.period_id, "paid_on": "2026-10-05", "amount": str(mp.amount),
         "payment_mode": "UPI", "payment_note": "UTR123456789012", "back": f"/?view=simple&period_id={mp.period_id}"},

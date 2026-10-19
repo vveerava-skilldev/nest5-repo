@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.dates import ist_today
 from app.database import get_db
 from app.domain.expense_categories import ADD_CATEGORY_VALUE
 from app.models import (
@@ -348,7 +349,7 @@ def corpus_goals_page(request: Request, db: Session = Depends(get_db), category:
             "category": category,
             "back": "/corpus",
             "period": None,
-            "today": date.today(),
+            "today": ist_today(),
         },
     )
 
@@ -447,7 +448,7 @@ def campaign_detail(request: Request, campaign_id: int, db: Session = Depends(ge
             "payments": payments,
             "cancel_pending": owner_svc.pending_requests_map(db, "corpus_payment"),
             "payment_modes": owner_svc.PAYMENT_MODES,
-            "today": date.today(),
+            "today": ist_today(),
             "period": None,
         },
     )

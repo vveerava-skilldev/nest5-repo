@@ -1,4 +1,5 @@
 """Asset schedule: asset register, recurring tasks, maintenance log, buckets, alerts, migration."""
+from app.dates import ist_today
 import os
 import sqlite3
 import subprocess
@@ -53,7 +54,7 @@ def test_seeded_register(seeded_db, owner_client):
 
 
 def test_register_tasks_and_log(seeded_db, admin_client, owner_client):
-    today = date.today()
+    today = ist_today()
     r = admin_client.post("/assets", data={
         "name": "Borewell pump", "asset_type": "Motor/pump", "location": "Cellar", "vendor_contact": "Ravi 98480",
         "install_date": "2021-04-05", "warranty_expiry": (today - timedelta(days=3)).isoformat(), "cost": "18500",
@@ -172,7 +173,7 @@ def test_old_schedule_form_still_works(seeded_db, admin_client):
 def test_owner_view_only(seeded_db, owner_client):
     lift = schedule_svc.asset_by_name(seeded_db, "Lift")
     task = AssetMaintenanceSchedule(asset_id=lift.id, asset="Lift", task="Owner view task", frequency=ScheduleFrequency.MONTHLY,
-                                    next_due_on=date.today() + timedelta(days=60))
+                                    next_due_on=ist_today() + timedelta(days=60))
     seeded_db.add(task)
     seeded_db.commit()
     try:

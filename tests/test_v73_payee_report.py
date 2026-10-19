@@ -1,4 +1,5 @@
 """v7.3 (in place): admin-only Payee / UPI audit report: filters, totals, exports, access, read-only."""
+from app.dates import ist_today
 from tests.test_v71_empty_and_review import run_scratch
 from tests.test_v73_payment_settings import SETUP as PAY_SETUP
 
@@ -9,6 +10,7 @@ SETUP = PAY_SETUP + r'''
 import csv, io, re
 import openpyxl
 from app.services import payee_report as rep
+from app.dates import ist_today
 OWNER = "asrk.sastry"
 owner = login(OWNER)
 tenant = login("ten1")
@@ -25,11 +27,11 @@ a_id, b_id = mrow(a_no).id, mrow(b_no).id
 owner_mp_id = mrow(oflat_no).id
 for i in (a_id, b_id, owner_mp_id):
     admin.post(f"/maintenance/{i}/revert")
-admin.post("/projects", data={"name": "Roof rpt", "total_cost": "25000", "due_date": (date.today() + timedelta(days=5)).isoformat()})
+admin.post("/projects", data={"name": "Roof rpt", "total_cost": "25000", "due_date": (ist_today() + timedelta(days=5)).isoformat()})
 db.expire_all()
 proj = db.scalar(select(Project).where(Project.name == "Roof rpt"))
 share = db.scalar(select(ProjectPayment).where(ProjectPayment.project_id == proj.id, ProjectPayment.flat_id == oflat_id))
-today = date.today().isoformat()
+today = ist_today().isoformat()
 
 # --- under the initial UPI ID
 admin.post(f"/maintenance/{a_id}/pay", data={"paid_on": "2026-10-04", "payment_note": "UTR-A-OLD"})

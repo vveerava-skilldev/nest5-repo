@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
 from app.config import settings
+from app.dates import ist_now
 from app.database import get_db
 from app.models import LedgerPeriod, ProjectContribution, ProjectPayment
 from app.routers.web import templates
@@ -31,7 +32,7 @@ RESTORE_CONFIRM_WORD = "RESTORE"
 
 
 def _stamp() -> str:
-    return datetime.now().strftime("%Y%m%d-%H%M%S")
+    return ist_now().strftime("%Y%m%d-%H%M%S")
 
 
 def _download(content: bytes, filename: str, media_type: str) -> Response:
@@ -55,7 +56,7 @@ def _page(request: Request, db: Session, status_code: int = 200, **extra):
         "periods": [(p.id, ledger_svc.month_label(p)) for p in periods],
         "counts": export_svc.row_counts(db),
         "backups": [
-            (p.name, p.stat().st_size, datetime.fromtimestamp(p.stat().st_mtime))
+            (p.name, p.stat().st_size, datetime.utcfromtimestamp(p.stat().st_mtime))
             for p in backup_svc.list_backups()[:10]
         ],
         "is_sqlite": backup_svc.sqlite_path() is not None,

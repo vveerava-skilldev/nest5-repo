@@ -4,6 +4,7 @@ from datetime import date, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.dates import ist_today
 from app.models import Flat, Project, ProjectContribution, ProjectPayment
 from app.services import payment_details as payment_details_svc
 
@@ -29,7 +30,7 @@ def backfill(db: Session) -> int:
     for pp in db.scalars(select(ProjectPayment).where(ProjectPayment.paid_amount.is_(None))).all():
         if pp.is_paid:
             legacy = ProjectContribution(project_payment_id=pp.id, project_id=pp.project_id, flat_id=pp.flat_id,
-                                         amount=pp.amount, paid_on=pp.paid_on or date.today(),
+                                         amount=pp.amount, paid_on=pp.paid_on or ist_today(),
                                          payment_note=pp.payment_note)
             payment_details_svc.stamp_initial(db, legacy)
             db.add(legacy)
@@ -124,6 +125,6 @@ def has_payments(db: Session, project: Project) -> int:
 
 
 def is_overdue(pp: ProjectPayment, today: date | None = None) -> bool:
-    today = today or date.today()
+    today = today or ist_today()
     due = pp.project.due_date if pp.project else None
     return bool(due and due < today and pp.remaining > 0)

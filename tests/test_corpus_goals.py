@@ -1,4 +1,5 @@
 """Corpus goals: categories, line items, one Corpus area, migration."""
+from app.dates import ist_today
 import os
 import sqlite3
 import subprocess
@@ -38,7 +39,7 @@ def test_goal_with_category_and_line_items(admin_client, owner_client, seeded_db
     flats = _flats(seeded_db)
     r = admin_client.post("/corpus/campaigns", data={
         "name": "Lift modernisation", "category": "Lift", "target_amount": "50000",
-        "due_date": (date.today() + timedelta(days=30)).isoformat(),
+        "due_date": (ist_today() + timedelta(days=30)).isoformat(),
         "line_items": "Door sensors: 20000\nCabin panels: 30000",
     }, follow_redirects=False)
     goal = seeded_db.scalar(select(CorpusCampaign).where(CorpusCampaign.name == "Lift modernisation"))
@@ -59,11 +60,11 @@ def test_goal_with_category_and_line_items(admin_client, owner_client, seeded_db
 
         r = owner_client.post("/corpus/pay", data={
             "target": f"{flats['201']}:{goal.id}", "line_item_id": str(sensors_id), "amount": "4000",
-            "paid_on": date.today().isoformat(), "payment_mode": "UPI", "payment_note": "UTR123456789", "back": "/corpus",
+            "paid_on": ist_today().isoformat(), "payment_mode": "UPI", "payment_note": "UTR123456789", "back": "/corpus",
         }, follow_redirects=False)
         assert r.headers["location"].startswith("/corpus?msg=") and "Door+sensors" in r.headers["location"]
         r = owner_client.post("/corpus/pay", data={
-            "target": f"{flats['201']}:{goal.id}", "amount": "1000", "paid_on": date.today().isoformat(), "payment_note": "UTR123456789",
+            "target": f"{flats['201']}:{goal.id}", "amount": "1000", "paid_on": ist_today().isoformat(), "payment_note": "UTR123456789",
         }, follow_redirects=False)
         assert "msg=" in r.headers["location"]
 
@@ -85,7 +86,7 @@ def test_goal_with_category_and_line_items(admin_client, owner_client, seeded_db
         other = seeded_db.scalar(select(CorpusCampaign).where(CorpusCampaign.name == "Painting 2027"))
         r = owner_client.post("/corpus/pay", data={
             "target": f"{flats['201']}:{goal.id}", "line_item_id": str(other.line_items[0].id), "amount": "10",
-            "paid_on": date.today().isoformat()}, follow_redirects=False)
+            "paid_on": ist_today().isoformat()}, follow_redirects=False)
         assert "error=" in r.headers["location"]
 
         # Admin adds / removes line items; removing keeps the payments on the goal.

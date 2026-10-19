@@ -1,9 +1,9 @@
 """SQLite file backups (startup safety copies, pre-restore copies, raw download)."""
 import sqlite3
-from datetime import datetime
 from pathlib import Path
 
 from app.config import settings
+from app.dates import ist_now
 from app.database import engine
 
 
@@ -44,7 +44,7 @@ def make_backup(label: str = "") -> Path | None:
     src_path = sqlite_path()
     if src_path is None or not src_path.exists():
         return None
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = ist_now().strftime("%Y%m%d-%H%M%S")
     name = f"nest5-{stamp}{'-' + label if label else ''}.db"
     dest = Path(settings.backup_dir) / name
     n = 1

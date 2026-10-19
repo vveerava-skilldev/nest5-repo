@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.dates import ist_day_start_utc, ist_today
 from app.models import AuditLog, CorpusCampaign, Flat, LedgerPeriod, Project, User
 
 PAGE_SIZE = 25
@@ -366,7 +367,7 @@ def feed(
     today: date | None = None,
 ) -> dict:
     """Newest-first activity entries. Returns {items, total, has_more}."""
-    today = today or date.today()
+    today = today or ist_today()
     q = select(AuditLog)
     role = role if role in ROLE_FILTERS else "all"
     wanted = ROLE_FILTERS[role]
@@ -377,13 +378,13 @@ def feed(
         q = q.where(AuditLog.user_label.in_(names or [""]))
     start = end = None
     if range_key in RANGE_DAYS:
-        start = datetime.combine(today - timedelta(days=RANGE_DAYS[range_key] - 1), datetime.min.time())
+        start = ist_day_start_utc(today - timedelta(days=RANGE_DAYS[range_key] - 1))
     else:
         d_from, d_to = parse_date(date_from), parse_date(date_to)
         if d_from:
-            start = datetime.combine(d_from, datetime.min.time())
+            start = ist_day_start_utc(d_from)
         if d_to:
-            end = datetime.combine(d_to + timedelta(days=1), datetime.min.time())
+            end = ist_day_start_utc(d_to + timedelta(days=1))
     if start:
         q = q.where(AuditLog.created_at >= start)
     if end:

@@ -4,6 +4,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.dates import ist_today
 from app.config import settings
 from app.models import LedgerPeriod, MaintenanceFeeRevision, MaintenancePayment
 
@@ -13,7 +14,7 @@ def period_start(period: LedgerPeriod) -> date:
 
 
 def current_maintenance_fee(db: Session, as_of: date | None = None) -> int:
-    as_of = as_of or date.today()
+    as_of = as_of or ist_today()
     rev = db.scalar(
         select(MaintenanceFeeRevision)
         .where(MaintenanceFeeRevision.effective_date <= as_of)

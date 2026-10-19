@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.dates import ist_today
 from app import dates as dates_util
 from app.config import APP_VERSION, PORTAL_NAME, settings
 from app.domain.expense_categories import (
@@ -240,7 +241,7 @@ def dashboard(
             "add_actions": emptiness_svc.missing_actions(db) if is_admin(request) else [],
             "recent_activity": activity_svc.recent(db) if is_admin(request) else [],
             "my_advances": balances_svc.owner_advances(db, own_flat_ids) if own_flat_ids is not None else None,
-            "today": date.today(),
+            "today": ist_today(),
             "period": period,
             "nav": bundle["nav"],
             "summary": bundle["summary"],
@@ -313,7 +314,7 @@ def _maintenance_view(request: Request, db: Session, period_id: int | None):
             "payments_tab": "maintenance",
             "maintenance_fee": maintenance_fee_svc.fee_for_period(db, period),
             "cancel_pending": owner_svc.pending_requests_map(db, "maintenance_payment"),
-            "today": date.today(),
+            "today": ist_today(),
             "owner_paid": owner_paid,
             "owner_fees": {
                 p.id: maintenance_fee_svc.fee_for_period(db, p) for p in bundle["nav"]["periods"]
@@ -429,7 +430,7 @@ def expenses_page(
             "cancel_pending": owner_svc.pending_requests_map(db, "expense"),
             "rejected_count": rejected_count,
             "rejected_rows": rejected_rows,
-            "today": date.today(),
+            "today": ist_today(),
         },
     )
 
@@ -529,7 +530,7 @@ def admin_maintenance_fee_page(request: Request, db: Session = Depends(get_db)):
             "previous": previous,
             "current_fee": current,
             "default_fee": settings.maintenance_fee,
-            "this_month": date.today().strftime("%Y-%m"),
+            "this_month": ist_today().strftime("%Y-%m"),
         },
     )
 
@@ -916,7 +917,7 @@ def project_detail(request: Request, project_id: int, db: Session = Depends(get_
             "contributions": contributions,
             "payment_count": projects_svc.has_payments(db, proj),
             "cancel_pending": owner_svc.pending_requests_map(db, "project_contribution"),
-            "today": date.today(),
+            "today": ist_today(),
         },
     )
 
@@ -945,7 +946,7 @@ def payments_projects_page(request: Request, db: Session = Depends(get_db)):
                 "paid": sum(min(pp.paid, pp.amount) for pp in rows),
                 "pending": sum(pp.remaining for pp in rows),
             },
-            "today": date.today(),
+            "today": ist_today(),
             "payments_tab": "projects",
             "period": None,
         },
@@ -973,7 +974,7 @@ def payments_expenses_page(request: Request, db: Session = Depends(get_db)):
             "items": items,
             "expense_categories": _expense_categories(db, owner=not is_admin(request)),
             "cancel_pending": owner_svc.pending_requests_map(db, "expense"),
-            "today": date.today(),
+            "today": ist_today(),
             "payments_tab": "expenses",
             "period": None,
         },
@@ -1017,7 +1018,7 @@ def _corpus_view(request: Request, db: Session, period_id: int | None):
             "payments_tab": "corpus",
             "back": "/payments/corpus",
             "cancel_pending": owner_svc.pending_requests_map(db, "corpus_payment"),
-            "today": date.today(),
+            "today": ist_today(),
         },
     )
 
@@ -1204,7 +1205,7 @@ def assets_redirect():
 @router.get("/assets/{asset_id}", response_class=HTMLResponse)
 def asset_detail(request: Request, asset_id: int, db: Session = Depends(get_db)):
     asset = _live_asset(db, asset_id)
-    today = date.today()
+    today = ist_today()
     tasks = [(t, schedule_svc.schedule_status(t, today)) for t in schedule_svc.tasks_for(db, asset)]
     logs = schedule_svc.history(db, asset)
     return templates.TemplateResponse(
@@ -1315,7 +1316,7 @@ def asset_log_create(
             raise HTTPException(400, detail="That task does not belong to this asset.")
     if not task and not notes.strip():
         return _schedule_back(back or f"/assets/{asset.id}", "Add a note when the entry is not for a task.")
-    log = schedule_svc.record_log(db, asset, task, _opt_date(done_on) or date.today(), done_by=done_by.strip(),
+    log = schedule_svc.record_log(db, asset, task, _opt_date(done_on) or ist_today(), done_by=done_by.strip(),
                                   notes=notes.strip(), cost=_opt_amount(cost),
                                   created_by=getattr(request.state, "username", None))
     audit_svc.log_audit(db, entity_type="asset_log", entity_id=log.id, action="create", after=log)
@@ -1456,7 +1457,7 @@ def schedule_mark_done(
     require_auth(request)
     item = _live_task(db, item_id)
     before = audit_svc.snapshot(item)
-    done = _opt_date(done_on) or date.today()
+    done = _opt_date(done_on) or ist_today()
     log = schedule_svc.record_log(db, item.asset_ref or _live_asset(db, item.asset_id), item, done,
                                   done_by=done_by.strip(), notes=notes.strip(), cost=_opt_amount(cost),
                                   created_by=getattr(request.state, "username", None))

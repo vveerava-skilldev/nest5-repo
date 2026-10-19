@@ -1,4 +1,5 @@
 """v7.3 D: admin-configured payment details with append-only history, plus the per-payment payee snapshot."""
+from app.dates import ist_today
 import pytest
 
 from tests.test_v71_empty_and_review import run_scratch
@@ -6,6 +7,7 @@ from tests.test_v71_empty_and_review import run_scratch
 SETUP = r'''
 from datetime import date, datetime, timedelta
 from sqlalchemy import func
+from app.dates import ist_today
 from app.services import payment_details as pay
 from app.services import ledger as ledger_svc
 tenant_flat = db.scalar(select(Flat).where(Flat.number == "101"))
@@ -193,13 +195,13 @@ admin_mp, owner_mp = mrow(other_number), mrow(oflat.number)
 admin_mp_id, owner_mp_id, oflat_id = admin_mp.id, owner_mp.id, oflat.id
 admin.post(f"/maintenance/{admin_mp_id}/revert"); admin.post(f"/maintenance/{owner_mp_id}/revert")
 # a project + goal to contribute to
-admin.post("/projects", data={"name": "Roof v73", "total_cost": "25000", "due_date": (date.today() + timedelta(days=5)).isoformat()})
-admin.post("/corpus/campaigns", data={"name": "Lift v73", "target_amount": "50000", "due_date": (date.today() + timedelta(days=15)).isoformat()})
+admin.post("/projects", data={"name": "Roof v73", "total_cost": "25000", "due_date": (ist_today() + timedelta(days=5)).isoformat()})
+admin.post("/corpus/campaigns", data={"name": "Lift v73", "target_amount": "50000", "due_date": (ist_today() + timedelta(days=15)).isoformat()})
 db.expire_all()
 proj = db.scalar(select(Project).where(Project.name == "Roof v73"))
 goal = db.scalar(select(CorpusCampaign).where(CorpusCampaign.name == "Lift v73"))
 share = db.scalar(select(ProjectPayment).where(ProjectPayment.project_id == proj.id, ProjectPayment.flat_id == oflat_id))
-today = date.today().isoformat()
+today = ist_today().isoformat()
 
 def record_all(tag):
     """admin maintenance, owner maintenance (UPI+UTR), owner project (cash), owner corpus (bank), admin project via mark paid."""

@@ -1,5 +1,6 @@
 """v6 features: owner project payments, expense categories, edit/delete projects & goals,
 dashboard balances, owner advances, admin Actions hub."""
+from app.dates import ist_today
 from datetime import date, timedelta
 
 from sqlalchemy import select
@@ -70,7 +71,7 @@ def _pay(client, share_id, amount, back="/payments/projects"):
 
 def test_owner_pays_project_share_in_parts(seeded_db, admin_client, owner_client):
     flats = _flats(seeded_db)
-    project = _create_project(admin_client, seeded_db, "Water softener v6", due=(date.today() - timedelta(days=3)).isoformat())
+    project = _create_project(admin_client, seeded_db, "Water softener v6", due=(ist_today() - timedelta(days=3)).isoformat())
     try:
         pp = _share(seeded_db, project, flats["201"])
         tab = owner_client.get("/payments/projects").text
@@ -330,10 +331,10 @@ def test_dashboard_balances_and_settlement_card(seeded_db, admin_client, owner_c
         assert f'action="/settlements/{small.id}/settle"' in sett
         assert f'action="/settlements/{big.id}/settle"' not in sett
 
-        r = admin_client.post(f"/settlements/{small.id}/settle", data={"settled_on": date.today().isoformat(), "back": "/"},
+        r = admin_client.post(f"/settlements/{small.id}/settle", data={"settled_on": ist_today().isoformat(), "back": "/"},
                               follow_redirects=False)
         assert r.headers["location"].startswith("/?msg=")
-        r = admin_client.post(f"/settlements/{big.id}/settle", data={"settled_on": date.today().isoformat(), "back": "/"},
+        r = admin_client.post(f"/settlements/{big.id}/settle", data={"settled_on": ist_today().isoformat(), "back": "/"},
                               follow_redirects=False)
         assert r.headers["location"].startswith("/?error=")
         assert ledger_svc.compute_fund_balance(seeded_db) == held - 300
@@ -376,7 +377,7 @@ def test_owner_sees_own_unsettled_expenses(seeded_db, admin_client, owner_client
             assert "owed back to you" in page and f"₹{expected}" in page
             assert "Mine v6" in page and "Waiting to be settled" in page
             assert "Theirs v6" not in page
-        admin_client.post(f"/settlements/{mine.id}/settle", data={"settled_on": date.today().isoformat()})
+        admin_client.post(f"/settlements/{mine.id}/settle", data={"settled_on": ist_today().isoformat()})
         page = owner_client.get(f"/flats/{flats['201']}").text
         assert "Mine v6" in page and "Settled" in page
     finally:
@@ -394,7 +395,7 @@ def test_owner_sees_own_unsettled_expenses(seeded_db, admin_client, owner_client
 
 def test_actions_hub(seeded_db, admin_client, owner_client, set_password):
     flats = _flats(seeded_db)
-    project = _create_project(admin_client, seeded_db, "Overdue v6", due=(date.today() - timedelta(days=10)).isoformat())
+    project = _create_project(admin_client, seeded_db, "Overdue v6", due=(ist_today() - timedelta(days=10)).isoformat())
     exp = _add_advance(seeded_db, flats["201"], "Hub advance v6", 120)
     set_password(seeded_db, "pavan.kumar", "temp-pass-123", must_change=True)
     try:

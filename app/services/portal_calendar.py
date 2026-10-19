@@ -24,7 +24,7 @@ from app.services import ledger as ledger_svc
 from app.services import recurring as recurring_svc
 from app.services import reminders as reminders_svc
 from app.services import schedule as schedule_svc
-from app.dates import format_date as fmt_date
+from app.dates import format_date as fmt_date, ist_today
 
 EVENT_TYPES = ("Meeting", "AGM", "Vendor visit", "Reminder", "Maintenance reminder", "Other")
 
@@ -59,7 +59,7 @@ def month_bounds(year: int, month: int) -> tuple[date, date]:
 
 def parse_month(raw: str | None, today: date | None = None) -> tuple[int, int]:
     """'YYYY-MM' -> (year, month); anything else means the current month."""
-    today = today or date.today()
+    today = today or ist_today()
     try:
         year, month = (int(x) for x in (raw or "").split("-", 1))
         if 2000 <= year <= 2100 and 1 <= month <= 12:
@@ -349,7 +349,7 @@ def _event_items(db: Session, start: date, end: date, viewer: Viewer) -> list[di
 
 
 def month_items(db: Session, year: int, month: int, viewer: Viewer, today: date | None = None) -> list[dict]:
-    today = today or date.today()
+    today = today or ist_today()
     start, end = month_bounds(year, month)
     items = (
         _event_items(db, start, end, viewer)
@@ -398,7 +398,7 @@ def agenda(days: dict[date, list[dict]]) -> list[dict]:
 
 
 def month_options(year: int, month: int, today: date | None = None) -> list[tuple[str, str]]:
-    today = today or date.today()
+    today = today or ist_today()
     keys = {month_key(*shift_month(today.year, today.month, d)) for d in range(-12, 25)}
     keys.add(month_key(year, month))
     return [(k, f"{k[5:]}-{k[:4]}") for k in sorted(keys)]

@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.dates import ist_today
 from app.models import Asset, AssetMaintenanceLog, AssetMaintenanceSchedule, ScheduleFrequency
 
 ASSET_TYPES = ("Lift", "Generator", "Water tank", "Motor/pump", "Fire safety", "CCTV / security",
@@ -56,11 +57,11 @@ def compute_next_due(
         return explicit_next
     if last_done:
         return add_interval(last_done, frequency, custom_days)
-    return date.today()
+    return ist_today()
 
 
 def schedule_status(item: AssetMaintenanceSchedule, today: date | None = None) -> str:
-    today = today or date.today()
+    today = today or ist_today()
     if not item.next_due_on:
         return "unknown"
     if item.next_due_on < today:
@@ -81,7 +82,7 @@ def list_schedules(db: Session) -> list[AssetMaintenanceSchedule]:
 
 
 def schedule_buckets(db: Session, within_days: int = 7) -> dict:
-    today = date.today()
+    today = ist_today()
     horizon = today + timedelta(days=within_days)
     overdue: list[AssetMaintenanceSchedule] = []
     upcoming: list[AssetMaintenanceSchedule] = []
@@ -178,7 +179,7 @@ def remove_log(db: Session, log: AssetMaintenanceLog) -> None:
 
 def board(db: Session, today: date | None = None) -> dict:
     """Asset schedule page: overdue / due this week / upcoming, then every asset with its tasks."""
-    today = today or date.today()
+    today = today or ist_today()
     week, horizon = today + timedelta(days=7), today + timedelta(days=UPCOMING_DAYS)
     overdue, this_week, upcoming = [], [], []
     for task in list_schedules(db):

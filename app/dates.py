@@ -1,8 +1,12 @@
 """Display and parse helpers for dates (DB stores ISO date).
 
 Everything the app *shows* goes through this module: dates are dd-mm-yyyy (zero padded, hyphens), date-times
-are dd-mm-yyyy HH:MM, and the IST clock is 'Mon 19-10-2026, 4:37 PM IST'. ISO yyyy-mm-dd stays only in form
+are dd-mm-yyyy HH:MM IST, and the IST clock is 'Mon 19-10-2026, 4:37 PM IST'. ISO yyyy-mm-dd stays only in form
 values, URLs, the database and the JSON backup.
+
+Stored date-times are naive UTC (``datetime.utcnow``). They are converted to IST (fixed UTC+5:30) only when
+shown or exported; date-only values (due dates, paid dates) are never converted. "Today" for due / overdue
+logic is the IST date (``ist_today``).
 """
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -43,10 +47,18 @@ def format_date_ddmmyyyy(value: date | datetime | str | None) -> str:
     return value.strftime("%d-%m-%Y")
 
 
-def format_datetime_ddmmyyyy(value: datetime | None) -> str:
+def to_ist(value: datetime) -> datetime:
+    """A stored (naive = UTC) or aware datetime as an aware IST datetime."""
+    return ist_now(value)
+
+
+def format_datetime_ddmmyyyy(value: datetime | date | None) -> str:
+    """Stored UTC date-time as '19-10-2026 16:37 IST'. A plain date (no time of day) is shown as a date."""
     if value is None:
         return "—"
-    return value.strftime("%d-%m-%Y %H:%M")
+    if not isinstance(value, datetime):
+        return format_date_ddmmyyyy(value)
+    return format_ist_stamp(value)
 
 
 format_date = format_date_ddmmyyyy
@@ -93,13 +105,25 @@ _ISO_DATETIME = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{
 _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 
 
+def _ist_from_match(m: re.Match) -> str:
+    stored = datetime(int(m[1]), int(m[2]), int(m[3]), int(m[4]), int(m[5]))
+    return format_ist_stamp(stored)
+
+
 def display_dates_in_text(text: str | None) -> str:
-    """Rewrite ISO dates / timestamps inside a piece of display text (e.g. a stored JSON payload) as dd-mm-yyyy."""
+    """Rewrite ISO dates as dd-mm-yyyy and ISO timestamps (stored UTC) as IST inside display text, e.g. a stored JSON payload."""
     if not text:
         return ""
-    text = _ISO_DATETIME.sub(lambda m: f"{m[3]}-{m[2]}-{m[1]} {m[4]}:{m[5]}", text)
+    text = _ISO_DATETIME.sub(_ist_from_match, text)
     return _ISO_DATE.sub(lambda m: f"{m[3]}-{m[2]}-{m[1]}", text)
 
 
 def ist_today(now: datetime | None = None) -> date:
+    """Today's date in India: what 'today', 'due today' and 'overdue' are measured against."""
     return ist_now(now).date()
+
+
+
+def ist_day_start_utc(day: date) -> datetime:
+    """Naive UTC datetime at which the IST calendar day `day` begins (for filtering stored UTC times by IST day)."""
+    return datetime.combine(day, datetime.min.time()) - timedelta(hours=5, minutes=30)

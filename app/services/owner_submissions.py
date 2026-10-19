@@ -11,7 +11,7 @@ from app.services import ledger as ledger_svc
 from app.services import maintenance_fee as maintenance_fee_svc
 from app.services import projects as projects_svc
 from app.services import reminders as reminders_svc
-from app.dates import format_date as fmt_date
+from app.dates import format_date as fmt_date, to_ist
 
 PAYMENT_MODES = ("UPI", "Cash", "Bank transfer", "Cheque", "Other")
 
@@ -244,7 +244,7 @@ def submissions_for_user(db: Session, user_id: int) -> list[dict]:
                 "summary": rej.summary,
                 "live": False,
                 "request": None,
-                "when": rej.paid_on or rej.rejected_at.date(),
+                "when": rej.paid_on or to_ist(rej.rejected_at).date(),
                 "rejection": rej,
             }
         )
@@ -268,7 +268,7 @@ def submissions_for_user(db: Session, user_id: int) -> list[dict]:
                 "summary": req.summary,
                 "live": False,
                 "request": req,
-                "when": req.created_at.date(),
+                "when": to_ist(req.created_at).date(),
                 "rejection": None,
             }
         )

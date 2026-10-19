@@ -6,6 +6,7 @@ from markupsafe import Markup
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.dates import ist_today
 from app.models import CorpusPayment, LedgerPeriod, MaintenancePayment, Project, ProjectContribution
 from app.services import corpus_campaigns as campaigns_svc
 
@@ -27,7 +28,7 @@ def _label(key: tuple[int, int]) -> str:
 
 
 def flat_insights(db: Session, flat_ids: list[int], months: int = 12, today: date | None = None) -> dict:
-    today = today or date.today()
+    today = today or ist_today()
     keys = _month_keys(db, months, today)
     index = {k: i for i, k in enumerate(keys)}
     trend = {name: [0] * len(keys) for name in ("maintenance", "corpus", "projects")}

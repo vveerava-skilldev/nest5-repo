@@ -1,4 +1,5 @@
 """v9.1: no sample asset tasks/alerts on a new install; admin + CLI 'clear all asset tasks & alerts'."""
+from app.dates import ist_today
 import os
 import sqlite3
 import subprocess
@@ -66,7 +67,7 @@ def test_seed_creates_assets_but_no_tasks(tmp_path):
 
 
 def test_clear_action_removes_tasks_alerts_everywhere_and_keeps_assets(seeded_db, admin_client, owner_client):
-    today = date.today()
+    today = ist_today()
     asset_count = len(schedule_svc.list_assets(seeded_db))
     ids = [_add_task(seeded_db, "Lift", "Door inspection v91", today - timedelta(days=5)),
            _add_task(seeded_db, "Generator", "Load test v91", today + timedelta(days=3)),
