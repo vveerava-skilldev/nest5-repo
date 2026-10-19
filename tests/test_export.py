@@ -32,7 +32,7 @@ def test_csv_zip_export(admin_client):
     names = set(zf.namelist())
     assert {"expenses.csv", "audit_logs.csv", "users.csv", "flats.csv"} <= names
     rows = list(csv.DictReader(io.StringIO(zf.read("expenses.csv").decode())))
-    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", rows[0]["expense_date"])
+    assert re.fullmatch(r"\d{2}-\d{2}-\d{4}", rows[0]["expense_date"])
     assert "password_hash" not in zf.read("users.csv").decode().splitlines()[0]
 
 

@@ -41,10 +41,10 @@ def test_admin_deletes_goal_with_payments_after_confirm(seeded_db, admin_client,
     gid = goal.id
     try:
         item_id = goal.line_items[0].id
-        admin_client.post(f"/corpus/campaigns/{gid}/pay", data={"flat_id": flats["102"], "amount": "300", "paid_on": "2026-10-05",
+        admin_client.post(f"/corpus/campaigns/{gid}/pay", data={"flat_id": flats["201"], "amount": "300", "paid_on": "2026-10-05",
                                                                 "line_item_id": item_id})
         admin_client.post(f"/corpus/campaigns/{gid}/pay", data={"flat_id": flats["301"], "amount": "200", "paid_on": "2026-10-06"})
-        owner_client.post("/corpus/pay", data={"target": f"{flats['102']}:{gid}", "amount": "100", "paid_on": "2026-10-07",
+        owner_client.post("/corpus/pay", data={"target": f"{flats['201']}:{gid}", "amount": "100", "paid_on": "2026-10-07",
                                                "payment_mode": "Cash", "payment_note": ""})
         seeded_db.expire_all()
         pays = seeded_db.scalars(select(CorpusPayment).where(CorpusPayment.campaign_id == gid)).all()
@@ -91,9 +91,9 @@ def test_admin_deletes_goal_with_payments_after_confirm(seeded_db, admin_client,
         assert ledger_svc.compute_fund_balance(seeded_db) == fund_before
         assert campaigns_svc.building_totals(seeded_db)["collected"] == collected_before - 600
         for client in (admin_client, owner_client):
-            for url in ("/", "/?view=simple", "/corpus", "/payments/corpus", f"/flats/{flats['102']}"):
+            for url in ("/", "/?view=simple", "/corpus", "/payments/corpus", f"/flats/{flats['201']}"):
                 r = client.get(url)
-                body = re.sub(r'<section class="card dashboard-activity.*?</section>', "", r.text, flags=re.S)
+                body = re.sub(r'<details class="card dashboard-activity.*?</details>', "", r.text, flags=re.S)
                 assert r.status_code == 200 and "Delete with payments v91" not in body, url
         assert admin_client.get(f"/corpus/goals/{gid}").status_code == 404
     finally:
@@ -121,12 +121,12 @@ def test_general_goal_can_be_deleted_and_is_not_recreated(seeded_db, admin_clien
     if existing is not None:  # another test left one: remove it so this test controls the state
         admin_client.post(f"/corpus/goals/{existing.id}/delete", data={"confirm": "DELETE", "confirm_payments": "yes"})
         seeded_db.expire_all()
-    admin_client.post("/corpus", data={"flat_id": flats["102"], "amount": "1500", "description": "one-off"})
+    admin_client.post("/corpus", data={"flat_id": flats["201"], "amount": "1500", "description": "one-off"})
     seeded_db.expire_all()
     general = campaigns_svc.general_campaign(seeded_db)
     assert general is not None
     gid = general.id
-    admin_client.post(f"/corpus/campaigns/{gid}/pay", data={"flat_id": flats["102"], "amount": "500", "paid_on": "2026-10-05"})
+    admin_client.post(f"/corpus/campaigns/{gid}/pay", data={"flat_id": flats["201"], "amount": "500", "paid_on": "2026-10-05"})
     page = admin_client.get(f"/corpus/goals/{gid}").text
     assert "Delete goal" in page and "1 payment(s) totalling ₹500" in page
     try:
@@ -168,7 +168,7 @@ from app.models import CorpusCampaign, Flat
 from app.services import users as u, corpus_campaigns as cc
 
 db = SessionLocal(); u.ensure_bootstrap_users(db); db.commit()
-for name in ("admin", "sastry"):
+for name in ("admin", "asrk.sastry"):
     u.set_password(u.get_by_username(db, name), "pw-pw-pw-1", must_change=False)
 db.commit()
 assert db.scalar(select(CorpusCampaign.id)) is None, "a new install must not seed any corpus goal"
@@ -179,10 +179,10 @@ def client(user):
     assert c.post("/login", data={"username": user, "password": "pw-pw-pw-1"}, follow_redirects=False).status_code == 303
     return c
 
-admin, owner = client("admin"), client("sastry")
+admin, owner = client("admin"), client("asrk.sastry")
 URLS = ["/", "/?view=simple", "/payments/maintenance", "/payments/corpus", "/payments/projects", "/payments/expenses",
         "/payments/building", "/expenses", "/corpus", "/projects", "/schedule", "/calendar", "/complaints",
-        "/owner/submissions", f"/flats/{flat['102']}", f"/flats/{flat['102']}/statement.pdf?period_id=", "/owner/statement.pdf?period_id="]
+        "/owner/submissions", f"/flats/{flat['201']}", f"/flats/{flat['201']}/statement.pdf?period_id=", "/owner/statement.pdf?period_id="]
 ADMIN_ONLY = ["/admin/actions", "/settlements", "/flats", "/admin/export", "/admin/export/pdf?period_id=",
               "/admin/export/excel", "/admin/export/csv", "/admin/export/json", "/audit"]
 
@@ -193,12 +193,12 @@ def sweep(tag):
             assert r.status_code == 200, (tag, url, r.status_code)
 
 sweep("no goals")
-r = owner.post("/corpus/pay", data={"target": f"{flat['102']}:1", "amount": "10", "paid_on": "2026-10-05"}, follow_redirects=False)
+r = owner.post("/corpus/pay", data={"target": f"{flat['201']}:1", "amount": "10", "paid_on": "2026-10-05"}, follow_redirects=False)
 assert r.status_code in (303, 400, 404, 422), r.status_code   # no goal to pay: refused, not a crash
 
-admin.post("/corpus", data={"flat_id": flat["102"], "amount": "1000", "description": "one-off"})
+admin.post("/corpus", data={"flat_id": flat["201"], "amount": "1000", "description": "one-off"})
 general = cc.general_campaign(db); assert general is not None
-admin.post(f"/corpus/campaigns/{general.id}/pay", data={"flat_id": flat["102"], "amount": "400", "paid_on": "2026-10-05"})
+admin.post(f"/corpus/campaigns/{general.id}/pay", data={"flat_id": flat["201"], "amount": "400", "paid_on": "2026-10-05"})
 sweep("general with payment")
 r = admin.post(f"/corpus/goals/{general.id}/delete", data={"confirm": "DELETE", "confirm_payments": "yes"}, follow_redirects=False)
 assert r.headers["location"].startswith("/corpus?msg="), r.headers["location"]

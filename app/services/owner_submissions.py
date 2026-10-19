@@ -11,6 +11,7 @@ from app.services import ledger as ledger_svc
 from app.services import maintenance_fee as maintenance_fee_svc
 from app.services import projects as projects_svc
 from app.services import reminders as reminders_svc
+from app.dates import format_date as fmt_date
 
 PAYMENT_MODES = ("UPI", "Cash", "Bank transfer", "Cheque", "Other")
 
@@ -65,7 +66,7 @@ def _utr_suffix(record) -> str:
 
 
 def _due_suffix(due: date | None) -> str:
-    return f" — due {due:%d-%m-%Y}" if due else ""
+    return f" — due {fmt_date(due)}" if due else ""
 
 
 def describe(db: Session, record_type: str, record) -> str:
@@ -75,7 +76,7 @@ def describe(db: Session, record_type: str, record) -> str:
         return f"Maintenance {label} — Flat {record.flat.number} — ₹{record.amount}{_utr_suffix(record)}{_due_suffix(due)}"
     if record_type == "expense":
         flat = f"Flat {record.paid_by_flat.number}" if record.paid_by_flat else "Account Balance"
-        return f"Expense {record.expense_date:%d-%m-%Y} {record.description} — {flat} — ₹{record.amount}"
+        return f"Expense {fmt_date(record.expense_date)} {record.description} — {flat} — ₹{record.amount}"
     if record_type == "project_contribution":
         return (f"Project {record.project.name} — Flat {record.flat.number} — ₹{record.amount}{_utr_suffix(record)}"
                 f"{_due_suffix(record.project.due_date)}")

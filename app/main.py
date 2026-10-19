@@ -11,7 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.database import Base, SessionLocal, engine
-from app.routers import accounts, admin_settings, admin_tools, calendar, data_export, owner, simple_dashboard, web
+from app.routers import accounts, admin_settings, admin_tools, calendar, data_export, owner, payee_report, simple_dashboard, web
 from app.services import backup as backup_svc
 from app.services.access import access_guard
 from app.services.corpus_campaigns import absorb_line_items
@@ -102,5 +102,6 @@ app.include_router(data_export.router)
 app.include_router(owner.router)
 app.include_router(admin_tools.router)
 app.include_router(admin_settings.router)
+app.include_router(payee_report.router)
 app.include_router(simple_dashboard.router)
 app.include_router(calendar.router)

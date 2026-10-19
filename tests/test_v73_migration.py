@@ -1,4 +1,4 @@
-"""v7.3 Alembic migration a3d9e6c1b852: from scratch, up/down/up, after the startup safety net, and over live data."""
+"""v7.3 Alembic migrations a3d9e6c1b852 and b4e7c2a9d531 (soft-deleted users): from scratch, up/down/up, after the startup safety net, and over live data."""
 import os
 import sqlite3
 import subprocess
@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-HEAD, PREV = "a3d9e6c1b852", "e5c1a7b9d204"
+V73, HEAD, PREV = "a3d9e6c1b852", "b4e7c2a9d531", "e5c1a7b9d204"
 PAYEE_TABLES = ("maintenance_payments", "corpus_payments", "project_contributions", "submission_rejections")
 PAYEE_COLS = {"payee_vpa", "payee_mobile", "payee_name", "payee_settings_id"}
 NEW_TABLES = {"recurring_tasks", "recurring_task_occurrences", "payment_detail_changes"}
@@ -46,6 +46,10 @@ def _assert_v73_schema(con):
     assert "opening_carried" in _cols(con, "ledger_periods")
 
 
+def _assert_soft_delete_schema(con):
+    assert {"deleted_at", "deleted_by"} <= _cols(con, "users")
+
+
 def _assert_v73_data(con):
     tasks = con.execute("select seed_key, title, day_of_month, due_mode, interval_months, is_active from recurring_tasks order by id").fetchall()
     assert tasks == [("watchman_salary", "Watchman salary payment", 5, "by", 1, 1),
@@ -59,19 +63,21 @@ def test_upgrade_from_scratch_is_idempotent_and_downgrade_round_trips(tmp_path):
     con = _con(tmp_path)
     assert _version(con) == HEAD
     _assert_v73_schema(con)
+    _assert_soft_delete_schema(con)
     _assert_v73_data(con)
     uniq = con.execute("select sql from sqlite_master where name = 'recurring_task_occurrences'").fetchone()[0]
     assert "UNIQUE" in uniq.upper()
     con.close()
 
     _alembic(tmp_path, "upgrade", "head")  # already at head: nothing to do
-    _alembic(tmp_path, "downgrade", "-1")
+    _alembic(tmp_path, "downgrade", PREV)
     con = _con(tmp_path)
     assert _version(con) == PREV
     assert not (NEW_TABLES & _tables(con))
     for t in PAYEE_TABLES:
         assert not (PAYEE_COLS & _cols(con, t)), t
     assert "opening_carried" not in _cols(con, "ledger_periods")
+    assert not ({"deleted_at", "deleted_by"} & _cols(con, "users"))
     assert con.execute("select count(*) from app_settings where key in ('pay_upi_vpa','pay_upi_mobile','pay_payee_name','pay_payee_backfill_done')").fetchone()[0] == 0
     con.close()
 
@@ -109,7 +115,7 @@ def test_upgrade_when_the_startup_safety_net_already_created_everything(tmp_path
 def test_upgrade_over_v72_data_backfills_payee_and_alters_nothing_else(tmp_path):
     _alembic(tmp_path, "upgrade", PREV)
     con = _con(tmp_path)
-    con.execute("insert into flats (id, number) values (1, '101'), (2, '102')")
+    con.execute("insert into flats (id, number) values (1, '101'), (2, '201')")
     con.execute("insert into ledger_periods (id, year, month, opening_fund_balance, closing_fund_balance, corpus_opening, corpus_closing, is_closed) "
                 "values (1, 2026, 9, 0, 3000, 0, 0, 1), (2, 2026, 10, 3000, null, 0, null, 0)")
     con.execute("insert into maintenance_payments (id, flat_id, period_id, amount, is_paid, paid_on, payment_note, payment_mode) values "
@@ -150,7 +156,57 @@ def test_upgrade_over_v72_data_backfills_payee_and_alters_nothing_else(tmp_path)
     assert first[0] is not None and first[1] is not None
     con.close()
 
-    _alembic(tmp_path, "downgrade", "-1")
+    _alembic(tmp_path, "downgrade", PREV)
     con = _con(tmp_path)
     assert other_columns(con) == before  # the round trip leaves the original data exactly as it was
     assert con.execute("select count(*) from maintenance_payments").fetchone()[0] == 4
+
+
+def test_soft_delete_revision_up_down_up_on_a_v73_shaped_copy(tmp_path):
+    """A database already at a3d9e6c1b852 (what live runs today) gains only the two nullable user columns."""
+    _alembic(tmp_path, "upgrade", V73)
+    con = _con(tmp_path)
+    assert _version(con) == V73 and not ({"deleted_at", "deleted_by"} & _cols(con, "users"))
+    con.execute("insert into users (id, username, password_hash, role, is_active, must_change_password, created_at) values "
+                "(1, 'admin', 'x', 'admin', 1, 0, '2026-10-01 00:00:00'), (2, 'owner.one', 'y', 'owner', 0, 1, '2026-10-02 00:00:00')")
+    con.execute("insert into flats (id, number) values (1, '101')")
+    con.execute("insert into user_flats (user_id, flat_id) values (2, 1)")
+    con.commit()
+    before = con.execute("select id, username, password_hash, role, is_active, must_change_password, created_at from users order by id").fetchall()
+    links = con.execute("select * from user_flats").fetchall()
+    con.close()
+
+    _alembic(tmp_path, "upgrade", "head")
+    _alembic(tmp_path, "upgrade", "head")  # idempotent
+    con = _con(tmp_path)
+    assert _version(con) == HEAD
+    _assert_soft_delete_schema(con)
+    assert con.execute("select id, username, password_hash, role, is_active, must_change_password, created_at from users order by id").fetchall() == before
+    assert con.execute("select deleted_at, deleted_by from users").fetchall() == [(None, None), (None, None)]
+    assert con.execute("select * from user_flats").fetchall() == links
+    con.execute("update users set deleted_at = '2026-10-19 10:00:00', deleted_by = 'admin' where id = 2")
+    con.commit()
+    con.close()
+
+    _alembic(tmp_path, "downgrade", V73)
+    con = _con(tmp_path)
+    assert _version(con) == V73 and not ({"deleted_at", "deleted_by"} & _cols(con, "users"))
+    assert con.execute("select id, username, is_active from users order by id").fetchall() == [(1, "admin", 1), (2, "owner.one", 0)]
+    assert con.execute("select * from user_flats").fetchall() == links  # a deleted user stays disabled and linked
+    con.close()
+    _alembic(tmp_path, "upgrade", "head")
+    con = _con(tmp_path)
+    assert _version(con) == HEAD and con.execute("select count(*) from users").fetchone()[0] == 2
+
+
+def test_soft_delete_columns_already_added_by_the_startup_safety_net(tmp_path):
+    env = _env(tmp_path)
+    boot = subprocess.run([sys.executable, "-c", "import app.main"], cwd=ROOT, env=env, capture_output=True, text=True)
+    assert boot.returncode == 0, boot.stderr[-1500:]
+    con = _con(tmp_path)
+    _assert_soft_delete_schema(con)
+    con.close()
+    _alembic(tmp_path, "stamp", V73)
+    _alembic(tmp_path, "upgrade", "head")
+    con = _con(tmp_path)
+    assert _version(con) == HEAD

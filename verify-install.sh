@@ -37,6 +37,8 @@ FILES=(
   alembic/versions/a3d9e6c1b852_v73_monthly_recurring_payment_details.py app/services/monthly.py app/services/recurring.py
   app/services/payment_details.py app/routers/admin_settings.py app/templates/admin_recurring.html
   app/templates/admin_payment_settings.html app/templates/admin_payment_history.html app/templates/_paid_to.html
+  alembic/versions/b4e7c2a9d531_users_soft_delete.py app/services/payee_report.py app/routers/payee_report.py
+  app/templates/admin_payee_report.html
 )
 OK=0
 for f in "${FILES[@]}"; do

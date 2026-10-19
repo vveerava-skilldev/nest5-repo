@@ -7,6 +7,7 @@ from email.message import EmailMessage
 from pathlib import Path
 
 from app.config import settings
+from app.dates import format_ist_stamp
 
 log = logging.getLogger("nest5.mailer")
 
@@ -22,7 +23,7 @@ def outbox_path() -> Path:
 def _write_outbox(to: str, subject: str, body: str, reason: str) -> None:
     path = outbox_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    stamp = format_ist_stamp()
     entry = (
         f"===== {stamp} | to: {to} | {reason}\n"
         f"Subject: {subject}\n\n{body}\n\n"

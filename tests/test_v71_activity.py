@@ -30,7 +30,7 @@ def _entry(entity, action, label="admin", before=None, after=None, entity_id=7, 
 
 
 def _flat_period(db):
-    flat = db.scalar(select(Flat).where(Flat.number == "102"))
+    flat = db.scalar(select(Flat).where(Flat.number == "201"))
     period = db.scalar(select(LedgerPeriod).where(LedgerPeriod.year == 2026, LedgerPeriod.month == 10))
     return flat, period
 
@@ -41,11 +41,11 @@ def _flat_period(db):
 def test_owner_submission_sentence_matches_the_spec(seeded_db):
     flat, period = _flat_period(seeded_db)
     lk = activity_svc.lookups(seeded_db)
-    e = _entry("maintenance_payment", "owner_submit", "sastry",
+    e = _entry("maintenance_payment", "owner_submit", "asrk.sastry",
                after={"flat_id": flat.id, "period_id": period.id, "amount": 2000})
     h = activity_svc.humanize(e, lk)
-    assert h["sentence"] == "sastry (owner, Flat 102) submitted maintenance ₹2,000 for 10-2026"
-    assert h["role"] == "owner" and h["badge"] == "Owner" and h["amount"] == 2000 and h["flat"] == "Flat 102"
+    assert h["sentence"] == "asrk.sastry (owner, Flat 201) submitted maintenance ₹2,000 for 10-2026"
+    assert h["role"] == "owner" and h["badge"] == "Owner" and h["amount"] == 2000 and h["flat"] == "Flat 201"
 
 
 def test_admin_reject_expense_sentence(seeded_db):
@@ -61,7 +61,7 @@ def test_rejected_owner_payments_have_sentences(seeded_db):
     lk = activity_svc.lookups(seeded_db)
     mp = activity_svc.humanize(_entry("maintenance_payment", "reject", "admin",
                                       after={"flat_id": flat.id, "period_id": period.id, "amount": 2500}), lk)
-    assert mp["sentence"] == "admin rejected maintenance payment ₹2,500 for 10-2026" and mp["flat"] == "Flat 102"
+    assert mp["sentence"] == "admin rejected maintenance payment ₹2,500 for 10-2026" and mp["flat"] == "Flat 201"
     cp = activity_svc.humanize(_entry("corpus_payment", "reject", "admin", after={"amount": 100000, "flat_id": flat.id}), lk)
     assert cp["sentence"] == "admin rejected corpus payment ₹1,00,000"
 
@@ -142,14 +142,14 @@ from datetime import datetime, timedelta
 from app.services import activity as act
 db.execute(text('DELETE FROM audit_logs')); db.commit()
 now = datetime.utcnow()
-fl = db.scalar(select(Flat).where(Flat.number == '102')).id
+fl = db.scalar(select(Flat).where(Flat.number == '201')).id
 def add(entity, action, label, days, **after):
     db.add(AuditLog(entity_type=entity, entity_id=3, action=action, user_label=label,
                     after_json=json.dumps(after), created_at=now - timedelta(days=days)))
-add('maintenance_payment', 'owner_submit', 'sastry', 0, amount=2000, flat_id=fl)
+add('maintenance_payment', 'owner_submit', 'asrk.sastry', 0, amount=2000, flat_id=fl)
 add('expense', 'reject', 'admin', 1, description='Bulbs', amount=640)
 add('expense', 'create', 'admin', 10, description='Paint', amount=900)
-add('maintenance_payment', 'owner_submit', 'sastry', 20, amount=1111, flat_id=fl)
+add('maintenance_payment', 'owner_submit', 'asrk.sastry', 20, amount=1111, flat_id=fl)
 add('expense', 'create', 'admin', 45, description='OldBill', amount=50)
 add('gizmo', 'wobble', 'admin', 2)
 for i in range(30):
@@ -179,11 +179,11 @@ out['p3'] = get('/admin/activity?role=admin&range=7&page=3')
 out['bad'] = get('/admin/activity?role=zzz&range=99&date_from=garbage&page=-4')
 out['dash'] = get('/')
 out['audit'] = get('/audit')
-sastry = login('sastry'); tenant = login('tnt.feed')
-out['owner_activity'] = [get('/admin/activity', sastry)[0], get('/audit', sastry)[0]]
+owner_c = login('asrk.sastry'); tenant = login('tnt.feed')
+out['owner_activity'] = [get('/admin/activity', owner_c)[0], get('/audit', owner_c)[0]]
 out['tenant_activity'] = [get('/admin/activity', tenant)[0], get('/audit', tenant)[0]]
-out['owner_dash'] = get('/', sastry)
-out['owner_nav'] = get('/corpus', sastry)
+out['owner_dash'] = get('/', owner_c)
+out['owner_nav'] = get('/corpus', owner_c)
 """
 
 
@@ -200,21 +200,21 @@ def test_activity_page_filters_ranges_and_pagination(feed_data):
     d = feed_data
     code, page = d["all"]
     assert code == 200 and 'class="activity-list"' in page and "<table" not in page.split("activity-list")[1].split("</ul>")[0]
-    assert "sastry (owner, Flat 102) submitted maintenance ₹2,000" in page
+    assert "asrk.sastry (owner, Flat 201) submitted maintenance ₹2,000" in page
     assert "admin rejected expense “Bulbs” ₹640" in page
     assert "wobble on gizmo #3" in page  # unknown action: generic fallback
     assert re.search(r"\d\d-\d\d-\d{4} \d\d:\d\d", page)
     for chip in ("All", "Owners", "Admin", "Tenants", "Last 7 days", "Last 30 days"):
         assert f">{chip}</a>" in page
-    assert page.index("sastry (owner") < page.index("Bulbs") < page.index("wobble on gizmo")  # newest first
+    assert page.index("asrk.sastry (owner") < page.index("Bulbs") < page.index("wobble on gizmo")  # newest first
 
     owners = d["owners"][1]
     assert "submitted maintenance ₹2,000" in owners and "Bulbs" not in owners and "tnt.feed" not in owners
     assert 'chip active" href="/admin/activity?role=owners"' in owners
     admins = d["admins"][1]
-    assert "Bulbs" in admins and "sastry (owner" not in admins
+    assert "Bulbs" in admins and "asrk.sastry (owner" not in admins
     tenants = d["tenants"][1]
-    assert "tnt.feed (tenant, Flat 102) submitted maintenance ₹777" in tenants and "Bulbs" not in tenants and "sastry" not in tenants
+    assert "tnt.feed (tenant, Flat 201) submitted maintenance ₹777" in tenants and "Bulbs" not in tenants and "asrk.sastry" not in tenants
 
     r7, r30 = d["r7"][1], d["r30"][1] + d["r30b"][1]
     assert "Bulbs" in r7 and "Paint" not in r7
@@ -231,9 +231,11 @@ def test_activity_page_filters_ranges_and_pagination(feed_data):
 def test_dashboard_recent_activity_card(feed_data):
     d = feed_data
     code, dash = d["dash"]
-    card = re.search(r'<section class="card dashboard-activity.*?</section>', dash, re.S).group(0)
+    card = re.search(r'<details class="card dashboard-activity.*?</details>', dash, re.S).group(0)
     assert code == 200 and "Recent activity" in card
     assert 'href="/admin/activity"' in card and "View all" in card
+    assert re.match(r'<details class="card dashboard-activity no-print">\s*<summary>', card) and "<details open" not in card
+    assert re.search(r'<summary>.*Recent activity.*<span class="badge">10</span>', card, re.S)
     assert len(re.findall(r'class="activity-item"', card)) == 10
     assert 'href="/admin/activity"' in dash.split("</nav>")[0]  # menu item
 
@@ -268,7 +270,7 @@ out['pages'] = {u: [admin.get(u).status_code, admin.get(u).text] for u in ('/adm
 
 # ---- migration ------------------------------------------------------------------------------
 
-HEAD = "a3d9e6c1b852"
+HEAD = "b4e7c2a9d531"
 PREV = "d4b8f1a3c627"
 
 
@@ -328,7 +330,7 @@ def test_migration_on_a_v70_style_database_keeps_data_and_submissions_pending(tm
     subprocess.run([sys.executable, "scripts/seed.py"], cwd=ROOT, env=env, check=True, capture_output=True)
     with sqlite3.connect(db) as conn:
         conn.execute("INSERT INTO audit_logs (entity_type, entity_id, action, user_label, after_json, created_at) "
-                     "VALUES ('maintenance_payment', 1, 'owner_submit', 'sastry', '{\"amount\": 5}', '2026-10-01 09:00:00')")
+                     "VALUES ('maintenance_payment', 1, 'owner_submit', 'asrk.sastry', '{\"amount\": 5}', '2026-10-01 09:00:00')")
         before = {t: conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
                   for t in ("flats", "users", "maintenance_payments", "expenses", "audit_logs")}
     done = _alembic(db, "upgrade", "head")

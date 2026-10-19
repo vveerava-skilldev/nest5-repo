@@ -4,6 +4,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.dates import due_hint as dates_due_hint
 from app.dates import ist_today
 from app.models import CorpusPayment, Flat, LedgerPeriod, MaintenancePayment, Project, ProjectPayment
 from app.services import corpus_campaigns as campaigns_svc
@@ -19,7 +20,7 @@ def maintenance_due_date(period: LedgerPeriod) -> date:
 
 
 def due_hint(due: date | None) -> str:
-    return f"due {due:%d-%m-%Y}" if due else ""
+    return dates_due_hint(due)
 
 
 def reminders_for_flats(db: Session, flat_ids: list[int], today: date | None = None) -> dict:

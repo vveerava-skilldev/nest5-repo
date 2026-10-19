@@ -31,7 +31,7 @@ def _flats(db):
 def _without_panel(page: str) -> str:
     """The admin's collapsed 'Rejected expenses' clean-up panel is the only place a rejected row may appear."""
     page = re.sub(r'<details class="card no-print rejected-panel">.*?</details>', "", page, flags=re.S)
-    return re.sub(r'<section class="card dashboard-activity.*?</section>', "", page, flags=re.S)
+    return re.sub(r'<details class="card dashboard-activity.*?</details>', "", page, flags=re.S)
 
 
 def _oct(db):
@@ -110,7 +110,7 @@ def _all_totals(db, flats):
 def test_rejected_owner_expense_leaves_every_total(seeded_db, admin_client, owner_client, cleanup):
     flats = _flats(seeded_db)
     before = _all_totals(seeded_db, flats)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Reject me pump", 777, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Reject me pump", 777, cleanup)
     during = _all_totals(seeded_db, flats)
     assert during != before
     assert during["extra"]["bal"]["owed"] == before["extra"]["bal"]["owed"] + 777  # counted until rejected
@@ -135,7 +135,7 @@ def test_rejected_owner_expense_leaves_every_total(seeded_db, admin_client, owne
     assert "Reject me pump" not in admin_client.get("/admin/actions").text
     assert "Reject me pump" not in _without_panel(admin_client.get("/").text)
     assert admin_client.get("/admin/export/pdf?period_id=").content.startswith(b"%PDF")
-    stmt = owner_client.get(f"/flats/{flats['102']}/statement.pdf?period_id=")
+    stmt = owner_client.get(f"/flats/{flats['201']}/statement.pdf?period_id=")
     assert stmt.status_code == 200 and stmt.content.startswith(b"%PDF")
     seeded_db.expire_all()
     assert ledger_svc.expense_total(seeded_db) == before["expenses_all"]
@@ -148,7 +148,7 @@ def test_rejected_owner_expense_leaves_every_total(seeded_db, admin_client, owne
     assert seeded_db.scalar(select(Settlement).where(Settlement.expense_id == exp.id)) is None
     # nor edited
     r = admin_client.post(f"/expenses/{exp.id}/edit", data={"description": "x", "category": "Common", "amount": "5",
-                                                           "expense_date": "2026-10-12", "paid_by_flat_id": str(flats["102"])},
+                                                           "expense_date": "2026-10-12", "paid_by_flat_id": str(flats["201"])},
                           follow_redirects=False)
     assert "error=" in r.headers["location"]
 
@@ -164,7 +164,7 @@ def test_rejected_owner_expense_leaves_every_total(seeded_db, admin_client, owne
 
 def test_rejected_expense_is_hidden_everywhere_except_the_admin_cleanup_panel(seeded_db, admin_client, owner_client, set_password, cleanup):
     flats = _flats(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Hidden rejected bulb", 321, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Hidden rejected bulb", 321, cleanup)
     admin_client.post(f"/admin/expenses/{exp.id}/reject", data={"reason": "Duplicate bill"})
 
     # Admin: only the collapsed clean-up panel on Expenses lists it (with Reinstate / Delete / Clear all)
@@ -172,19 +172,19 @@ def test_rejected_expense_is_hidden_everywhere_except_the_admin_cleanup_panel(se
     assert "rejected-panel" in page and "Hidden rejected bulb" in page and "Duplicate bill" in page
     assert "Clear all rejected" in page and "/reinstate" in page and "/purge" in page
     assert "Hidden rejected bulb" not in _without_panel(page) and "Rejected</span>" not in page
-    for url in ("/payments/expenses", "/", "/?view=simple", "/settlements", "/admin/actions", f"/flats/{flats['102']}"):
+    for url in ("/payments/expenses", "/", "/?view=simple", "/settlements", "/admin/actions", f"/flats/{flats['201']}"):
         text = _without_panel(admin_client.get(url).text)
         assert "Hidden rejected bulb" not in text and "Duplicate bill" not in text, url
         assert "Clear all rejected" not in text, url
 
     # The submitting owner sees nothing of it in any advance / expense list
-    for url in ("/payments/expenses", "/expenses", "/", f"/flats/{flats['102']}"):
+    for url in ("/payments/expenses", "/expenses", "/", f"/flats/{flats['201']}"):
         text = owner_client.get(url).text
         assert "Hidden rejected bulb" not in text and "Duplicate bill" not in text, url
         assert "Clear all rejected" not in text and "/purge" not in text, url
 
     seeded_db.expire_all()
-    owed = balances_svc.owner_advances(seeded_db, [flats["102"]])
+    owed = balances_svc.owner_advances(seeded_db, [flats["201"]])
     assert exp.id not in [e.id for e in owed["unsettled"] + owed["settled"]] and "rejected" not in owed
 
     # Another owner never sees it either
@@ -193,7 +193,7 @@ def test_rejected_expense_is_hidden_everywhere_except_the_admin_cleanup_panel(se
     for url in ("/expenses", "/payments/expenses", "/", f"/flats/{flats['501']}", "/owner/submissions"):
         page = other.get(url).text
         assert "Hidden rejected bulb" not in page and "Duplicate bill" not in page, url
-    assert other.get(f"/flats/{flats['102']}").status_code == 403
+    assert other.get(f"/flats/{flats['201']}").status_code == 403
 
 
 def test_excel_and_csv_exports_leave_out_rejected_but_json_backup_keeps_them(seeded_db, admin_client, owner_client, cleanup):
@@ -203,7 +203,7 @@ def test_excel_and_csv_exports_leave_out_rejected_but_json_backup_keeps_them(see
     from openpyxl import load_workbook
 
     flats = _flats(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Export rejected pump", 4321, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Export rejected pump", 4321, cleanup)
     admin_client.post(f"/admin/expenses/{exp.id}/reject", data={"reason": "no"})
     from app.services import export as export_svc
 
@@ -221,7 +221,7 @@ def test_excel_and_csv_exports_leave_out_rejected_but_json_backup_keeps_them(see
 
 def test_only_admin_can_reject_reinstate_purge_or_clear(seeded_db, admin_client, owner_client, cleanup):
     flats = _flats(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Owner cannot reject", 111, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Owner cannot reject", 111, cleanup)
     for path in (f"/admin/expenses/{exp.id}/reject", f"/admin/expenses/{exp.id}/reinstate",
                  f"/admin/expenses/{exp.id}/purge", "/admin/expenses/clear-rejected"):
         assert owner_client.post(path, data={}, follow_redirects=False).status_code == 403, path
@@ -238,9 +238,9 @@ def test_only_admin_can_reject_reinstate_purge_or_clear(seeded_db, admin_client,
 
 def test_purge_one_and_clear_all_rejected(seeded_db, admin_client, owner_client, cleanup):
     flats = _flats(seeded_db)
-    a = _owner_submit(owner_client, seeded_db, flats["102"], "Purge A", 100, cleanup)
-    b = _owner_submit(owner_client, seeded_db, flats["102"], "Purge B", 200, cleanup)
-    c = _owner_submit(owner_client, seeded_db, flats["102"], "Keep C", 300, cleanup)
+    a = _owner_submit(owner_client, seeded_db, flats["201"], "Purge A", 100, cleanup)
+    b = _owner_submit(owner_client, seeded_db, flats["201"], "Purge B", 200, cleanup)
+    c = _owner_submit(owner_client, seeded_db, flats["201"], "Keep C", 300, cleanup)
     base = ledger_svc.compute_fund_balance(seeded_db)
     for e in (a, b):
         admin_client.post(f"/admin/expenses/{e.id}/reject", data={"reason": "no"})
@@ -270,14 +270,14 @@ def test_purge_one_and_clear_all_rejected(seeded_db, admin_client, owner_client,
 
 def test_settled_expense_cannot_be_rejected_and_pending_cancel_request_is_closed(seeded_db, admin_client, owner_client, cleanup):
     flats = _flats(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Settled then reject", 150, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Settled then reject", 150, cleanup)
     admin_client.post(f"/settlements/{exp.id}/settle", data={"settled_on": "2026-10-13"})
     r = admin_client.post(f"/admin/expenses/{exp.id}/reject", data={}, follow_redirects=False)
     assert "error=" in r.headers["location"]
     seeded_db.expire_all()
     assert seeded_db.get(Expense, exp.id).status in (None, "approved")
 
-    other = _owner_submit(owner_client, seeded_db, flats["102"], "Cancel asked then rejected", 90, cleanup)
+    other = _owner_submit(owner_client, seeded_db, flats["201"], "Cancel asked then rejected", 90, cleanup)
     owner_client.post("/owner/cancel-requests", data={"record_type": "expense", "record_id": other.id, "reason": "oops"})
     assert admin_client.post(f"/admin/expenses/{other.id}/reject", data={}).status_code in (200, 303)
     seeded_db.expire_all()
@@ -290,7 +290,7 @@ def test_settled_expense_cannot_be_rejected_and_pending_cancel_request_is_closed
 def test_cancel_request_keep_entry_keeps_expense_counted(seeded_db, admin_client, owner_client, cleanup):
     """'Keep entry' on an owner's cancel request keeps the expense counted (v9.3: plain Reject now rejects the expense)."""
     flats = _flats(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Cancel refused", 60, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Cancel refused", 60, cleanup)
     before = balances_svc.overview(seeded_db)["owed"]
     owner_client.post("/owner/cancel-requests", data={"record_type": "expense", "record_id": exp.id, "reason": "x"})
     seeded_db.expire_all()
@@ -305,7 +305,7 @@ def test_cancel_request_keep_entry_keeps_expense_counted(seeded_db, admin_client
 def test_approved_cancel_still_removes_expense(seeded_db, admin_client, owner_client, cleanup):
     flats = _flats(seeded_db)
     before = balances_svc.overview(seeded_db)["owed"]
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Cancel approved", 60, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Cancel approved", 60, cleanup)
     owner_client.post("/owner/cancel-requests", data={"record_type": "expense", "record_id": exp.id, "reason": "x"})
     seeded_db.expire_all()
     req = seeded_db.scalar(select(CancelRequest).where(CancelRequest.record_type == "expense", CancelRequest.record_id == exp.id))
@@ -319,7 +319,7 @@ def test_rejected_in_closed_month_does_not_move_account_balance(seeded_db, admin
     flats = _flats(seeded_db)
     sept = seeded_db.scalar(select(LedgerPeriod).where(LedgerPeriod.year == 2026, LedgerPeriod.month == 9))
     before = (sept.closing_fund_balance, ledger_svc.compute_fund_balance(seeded_db))
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Sept late bill", 400, cleanup, day="2026-09-20")
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Sept late bill", 400, cleanup, day="2026-09-20")
     admin_client.post(f"/admin/expenses/{exp.id}/reject", data={})
     seeded_db.expire_all()
     sept = seeded_db.scalar(select(LedgerPeriod).where(LedgerPeriod.year == 2026, LedgerPeriod.month == 9))
@@ -335,13 +335,13 @@ def test_other_submission_types_keep_counting_rules(seeded_db, admin_client, own
     flats = _flats(seeded_db)
     period = _oct(seeded_db)
     mp = seeded_db.scalar(select(MaintenancePayment).where(MaintenancePayment.period_id == period.id,
-                                                           MaintenancePayment.flat_id == flats["102"]))
+                                                           MaintenancePayment.flat_id == flats["201"]))
     saved = (mp.is_paid, mp.paid_on, mp.amount, mp.payment_note, mp.payment_mode, mp.submitted_by_user_id)
     mp.is_paid, mp.paid_on, mp.submitted_by_user_id = False, None, None
     seeded_db.commit()
     mp_id = mp.id
     try:
-        owner_client.post("/owner/maintenance", data={"flat_id": flats["102"], "period_id": period.id, "paid_on": "2026-10-06",
+        owner_client.post("/owner/maintenance", data={"flat_id": flats["201"], "period_id": period.id, "paid_on": "2026-10-06",
                                                       "amount": "2000", "payment_mode": "UPI", "payment_note": "UTR123456789"})
         counted = ledger_svc.compute_fund_balance(seeded_db)
         owner_client.post("/owner/cancel-requests", data={"record_type": "maintenance_payment", "record_id": mp_id})
@@ -372,10 +372,10 @@ def test_repair_fixes_rejected_rows_that_still_count(seeded_db, cleanup):
     # a rejected row that is (wrongly) still flagged settled with a live settlement and one unsettled
     period = _oct(seeded_db)
     settled = Expense(description="Repair settled", category="Common", amount=500, expense_date=date(2026, 10, 3),
-                      paid_by_flat_id=flats["102"], period_id=period.id, is_settled=True, status="rejected",
+                      paid_by_flat_id=flats["201"], period_id=period.id, is_settled=True, status="rejected",
                       submitted_by_user_id=1)
     unsettled = Expense(description="Repair unsettled", category="Common", amount=250, expense_date=date(2026, 10, 4),
-                        paid_by_flat_id=flats["102"], period_id=period.id, is_settled=False, status="rejected",
+                        paid_by_flat_id=flats["201"], period_id=period.id, is_settled=False, status="rejected",
                         submitted_by_user_id=1)
     seeded_db.add_all([settled, unsettled])
     seeded_db.flush()
@@ -417,7 +417,7 @@ def test_migration_from_scratch_and_repair_on_existing_rows(tmp_path):
     con = sqlite3.connect(db_file)
     cols = {row[1] for row in con.execute("PRAGMA table_info(expenses)")}
     assert {"status", "rejection_reason", "rejected_at", "rejected_by"} <= cols
-    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "a3d9e6c1b852"
+    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "b4e7c2a9d531"
     con.close()
     # Down and up again is clean
     assert _alembic(url, "downgrade", "b8e3f5a1d726").returncode == 0
@@ -431,7 +431,7 @@ def test_migration_repairs_rejected_but_counted_rows(tmp_path):
     assert _alembic(url, "upgrade", "b8e3f5a1d726").returncode == 0
     con = sqlite3.connect(db_file)
     con.execute("ALTER TABLE expenses ADD COLUMN status VARCHAR(20)")
-    con.execute("INSERT INTO flats (number) VALUES ('102')")
+    con.execute("INSERT INTO flats (number) VALUES ('201')")
     con.execute("INSERT INTO expenses (description, category, amount, expense_date, paid_by_flat_id, is_settled, status) "
                 "VALUES ('Rejected settled', 'Common', 500, '2026-10-03', 1, 1, 'rejected')")
     con.execute("INSERT INTO expenses (description, category, amount, expense_date, paid_by_flat_id, is_settled, status) "
@@ -464,13 +464,13 @@ def test_rejected_big_expense_does_not_block_settlement(seeded_db, admin_client,
     flats = _flats(seeded_db)
     held = ledger_svc.compute_fund_balance(seeded_db)
     base = balances_svc.overview(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Huge rejected bill", held + 9000, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Huge rejected bill", held + 9000, cleanup)
     seeded_db.expire_all()
     titles = [a["title"] for a in alerts_svc.build_dashboard_alerts(seeded_db, None)]
     assert "Settlement blocked" in titles
     bal = balances_svc.overview(seeded_db)
     assert bal["negative_if_all"] and bal["state"] in ("none", "some")
-    assert "Needs ₹" in admin_client.get("/").text or "would take the Account Balance" in admin_client.get("/").text
+    assert "Blocked" in admin_client.get("/settlements").text and "Huge rejected bill" in admin_client.get("/settlements").text
 
     admin_client.post(f"/admin/expenses/{exp.id}/reject", data={"reason": "Too large"})
     seeded_db.expire_all()
@@ -481,3 +481,4 @@ def test_rejected_big_expense_does_not_block_settlement(seeded_db, admin_client,
     assert bal["settle_now"] == base["settle_now"] and bal["negative_if_all"] == base["negative_if_all"]
     page = _without_panel(admin_client.get("/").text)
     assert "Huge rejected bill" not in page and "would take the Account Balance" not in page
+    assert "Huge rejected bill" not in admin_client.get("/settlements").text

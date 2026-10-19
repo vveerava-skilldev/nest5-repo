@@ -193,7 +193,7 @@ admin.post(f"/admin/recurring/tasks/{t.id}/edit", data={"title": "Lift service c
 db.expire_all()
 out["occ_due_after_edit"] = str(db.get(RecurringTaskOccurrence, occ.id).due_date)
 out["cal_legend_admin"] = "Recurring task" in page
-ownerc = login("sastry")
+ownerc = login("asrk.sastry")
 opage, oitems = cal(ownerc)
 out["owner_items"] = len(oitems)
 out["owner_legend"] = "Recurring task" in opage

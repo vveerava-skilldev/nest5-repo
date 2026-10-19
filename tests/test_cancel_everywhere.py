@@ -70,7 +70,7 @@ def totals(db, flat_ids):
 def _pages_without(clients, needle, extra=()):
     for client in clients:
         for url in list(PAGES) + list(extra):
-            text = re.sub(r'<section class="card dashboard-activity.*?</section>', "", client.get(url).text, flags=re.S)
+            text = re.sub(r'<details class="card dashboard-activity.*?</details>', "", client.get(url).text, flags=re.S)
             assert needle not in text, f"{needle} still shown on {url}"
 
 

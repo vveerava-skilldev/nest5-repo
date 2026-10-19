@@ -83,7 +83,7 @@ def test_owner_can_view_ledger_pages(seeded_db, owner_client):
         "/schedule",
         "/complaints",
         f"/statements/{oct_id}",
-        f"/flats/{flats['102']}",
+        f"/flats/{flats['201']}",
         "/account/password",
     ]:
         r = owner_client.get(url)
@@ -92,7 +92,7 @@ def test_owner_can_view_ledger_pages(seeded_db, owner_client):
     assert "Mark paid" not in page and "Revert" not in page
     dash = owner_client.get("/").text
     assert "Audit log" not in dash and "/admin/users" not in dash and "/settlements" not in dash.split("<main>")[0]
-    assert "My flat 102" in dash
+    assert "My flat 201" in dash
     assert "Delete" not in owner_client.get("/expenses").text
 
 
@@ -102,7 +102,7 @@ def test_owner_with_two_flats_sees_both(seeded_db, set_password):
     client = make_client("manikyamba", OWNER_PASSWORD)
     assert client.get(f"/flats/{flats['101']}").status_code == 200
     assert client.get(f"/flats/{flats['401']}").status_code == 200
-    assert client.get(f"/flats/{flats['102']}").status_code == 403
+    assert client.get(f"/flats/{flats['201']}").status_code == 403
 
 
 def test_owner_can_raise_complaint_as_open(seeded_db, owner_client):
@@ -118,7 +118,7 @@ def test_owner_can_raise_complaint_as_open(seeded_db, owner_client):
     log = seeded_db.scalars(
         select(AuditLog).where(AuditLog.entity_type == "complaint", AuditLog.entity_id == c.id)
     ).one()
-    assert log.user_label == "sastry"
+    assert log.user_label == "asrk.sastry"
 
 
 def test_admin_can_do_everything(seeded_db, admin_client):
@@ -184,7 +184,7 @@ def test_admin_user_management_and_audit(seeded_db, admin_client):
 
     r = admin_client.post(
         f"/admin/users/{user.id}/update",
-        data={"display_name": "Tenant", "email": "t@example.com", "role": "owner", "flat_ids": [str(flats["101"]), str(flats["102"])]},
+        data={"display_name": "Tenant", "email": "t@example.com", "role": "owner", "flat_ids": [str(flats["101"]), str(flats["201"])]},
     )
     assert r.status_code == 200
 

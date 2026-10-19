@@ -7,7 +7,8 @@
 {% include "_reminders.html" %}
 {% set base_path = '/' %}
 {% include "_period_nav.html" %}
-{% include "_alerts.html" %}
+{% set is_adm = is_admin(request) %}
+{% if not is_adm %}{% include "_alerts.html" %}{% endif %}
 {% set show_corpus = not empty_flags or empty_flags.goals %}
 {% set hide_expense_cards = empty_flags and not empty_flags.expenses %}
 <div class="grid">
@@ -35,68 +36,8 @@
   {% endif %}
 </div>
 
-{% if is_admin(request) %}
-{% if hub and hub.total %}
-<section class="card dashboard-actions no-print">
-  <div class="card-head">
-    <h3 style="margin:0">Actions <span class="badge warn">{{ hub.total }}</span></h3>
-    <a href="/admin/actions">Open the full list →</a>
-  </div>
-  {% with limit = 3 %}{% include "_actions_list.html" %}{% endwith %}
-</section>
-{% endif %}
-{% if bal.by_flat %}
-<section class="card settlement-card">
-  <div class="card-head">
-    <h3 style="margin:0">Settlement</h3>
-    <a href="/settlements" class="no-print">Settlements page →</a>
-  </div>
-  {% if bal.negative_if_all %}
-  <p class="badge bad" style="white-space:normal">Settling all ₹{{ bal.owed }} would take the Account Balance to ₹{{ bal.effective }} (negative). Settle the oldest first; the rest waits until more is collected.</p>
-  {% endif %}
-  <div class="table-scroll">
-  <table>
-    <thead><tr><th>Flat</th><th>Expense</th><th>Date</th><th>Amount</th><th class="no-print"></th></tr></thead>
-    <tbody>
-    {% for row in bal.by_flat %}
-      {% for item in row["items"] %}
-      {% set e = item.expense %}
-      <tr>
-        {% if loop.first %}<td rowspan="{{ row['items']|length }}"><strong>{{ row.flat.number }}</strong><br><small>₹{{ row.total }} owed</small></td>{% endif %}
-        <td>{{ e.description }}</td>
-        <td>{{ e.expense_date|format_date }}</td>
-        <td>₹{{ e.amount }}</td>
-        <td class="no-print">
-          {% if item.affordable %}
-          <form method="post" action="/settlements/{{ e.id }}/settle" class="inline">
-            <input type="hidden" name="settled_on" value="{{ today.isoformat() }}">
-            <input type="hidden" name="back" value="/">
-            <button type="submit">Settle</button>
-          </form>
-          {% else %}
-          <span class="badge warn">Needs ₹{{ e.amount - bal.available }} more</span>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-</section>
-{% endif %}
-{% if recent_activity %}
-<section class="card dashboard-activity no-print">
-  <div class="card-head">
-    <h3 style="margin:0">Recent activity</h3>
-    <a href="/admin/activity">View all →</a>
-  </div>
-  {% include "_activity_list.html" %}
-</section>
-{% endif %}
-{% elif my_advances %}
-{% include "_my_advances.html" %}
-{% endif %}
+{% set dh = action_board.due_headers %}
+{% macro due_note(h, label='') %}{% if h and h.due and is_admin(request) %}<small class="due-hint{{ ' overdue' if h.overdue }}">{{ label }}{{ 'overdue since' if h.overdue else 'due' }} {{ h.due|format_date }}</small>{% endif %}{% endmacro %}
 
 {% macro corpus_cell(cell) %}
   {% if not cell.has_items %}
@@ -123,6 +64,7 @@
   {% endif %}
 {% endmacro %}
 
+{% set board_html %}
 <section class="card dashboard-action">
   <div class="dashboard-action-head">
     <h3 style="margin:0">Action board{% if period %} — {{ period.year }}-{{ '%02d'|format(period.month) }}{% endif %}</h3>
@@ -140,10 +82,10 @@
       <thead>
         <tr>
           <th class="col-flat">Flat / owner</th>
-          <th>Maintenance</th>
-          {% if show_corpus %}<th>Corpus</th>{% endif %}
+          <th>Maintenance{{ due_note(dh.maintenance) }}</th>
+          {% if show_corpus %}<th>Corpus{% for g in dh.corpus %}{{ due_note(g, g.name ~ ': ') }}{% endfor %}</th>{% endif %}
           {% for proj in action_board.projects %}
-          <th class="col-project" title="{{ proj.name }}">{{ proj.name }}</th>
+          <th class="col-project" title="{{ proj.name }}">{{ proj.name }}{{ due_note(dh.projects.get(proj.id)) }}</th>
           {% endfor %}
           <th class="col-total">Pending</th>
         </tr>
@@ -207,6 +149,13 @@
     </table>
   </div>
 
+  {% if is_adm and (dh.maintenance or dh.corpus or dh.projects) %}
+  <p class="due-strip" aria-label="Due dates">
+    {% if dh.maintenance %}<span>Maintenance {{ due_note(dh.maintenance) }}</span>{% endif %}
+    {% if show_corpus %}{% for g in dh.corpus %}<span>{{ g.name }} {{ due_note(g) }}</span>{% endfor %}{% endif %}
+    {% for proj in action_board.projects %}{% if dh.projects.get(proj.id) %}<span>{{ proj.name }} {{ due_note(dh.projects.get(proj.id)) }}</span>{% endif %}{% endfor %}
+  </p>
+  {% endif %}
   <div class="dashboard-cards">
     {% for row in action_board.rows %}
     <article class="flat-card {% if row.row_pending %}row-needs-action{% endif %}">
@@ -246,6 +195,32 @@
     </article>
   </div>
 </section>
+{% endset %}
+{% if is_adm %}
+{{ board_html }}
+{% include "_alerts.html" %}
+{% if hub and hub.total %}
+<section class="card dashboard-actions no-print">
+  <div class="card-head">
+    <h3 style="margin:0">Actions <span class="badge warn">{{ hub.total }}</span></h3>
+    <a href="/admin/actions">Open the full list →</a>
+  </div>
+  {% with limit = 3 %}{% include "_actions_list.html" %}{% endwith %}
+</section>
+{% endif %}
+{% if recent_activity %}
+<details class="card dashboard-activity no-print">
+  <summary><strong>Recent activity</strong> <span class="badge">{{ recent_activity|length }}</span> <small class="activity-hint">latest entries · tap to expand</small></summary>
+  {% include "_activity_list.html" %}
+  <p class="activity-all"><a href="/admin/activity">View all →</a></p>
+</details>
+{% endif %}
+{% else %}
+{% if my_advances %}
+{% include "_my_advances.html" %}
+{% endif %}
+{{ board_html }}
+{% endif %}
 
 {% if add_actions %}
 <p class="add-actions no-print"><span>Not set up yet:</span>{% for a in add_actions %} <a href="{{ a.href }}" class="add-action">+ {{ a.label }}</a>{% endfor %}</p>

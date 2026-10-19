@@ -21,7 +21,7 @@ _seq = itertools.count(1)
 def _project_sheet(admin_client, owner_client, db, total="210000"):
     # The test database persists across tests, so every test gets its own project.
     project = _project(admin_client, db, f"Water softner v9 #{next(_seq)}", total)
-    own = _flat_id(db, "102")
+    own = _flat_id(db, "201")
     pp = db.scalar(select(ProjectPayment).where(ProjectPayment.project_id == project.id, ProjectPayment.flat_id == own))
     sheet = owner_client.get(f"/?view=simple&pay=p-{pp.id}").text
     return pp, sheet
@@ -61,7 +61,7 @@ def test_hint_data_includes_already_paid_for_project_and_corpus(seeded_db, admin
     form = _form(owner_client.get(f"/?view=simple&pay=p-{pp.id}").text)
     assert f'data-remaining="{pp.remaining}"' in form and f'data-total="{pp.amount}"' in form and 'data-paid="200"' in form
 
-    own = _flat_id(seeded_db, "102")
+    own = _flat_id(seeded_db, "201")
     goal = _goal(admin_client, seeded_db, "Lift v9 hint", 50000)
     share = next(s.share_amount for s in goal.shares if s.flat_id == own)
     owner_client.post("/corpus/pay", data={"target": f"{own}:{goal.id}", "amount": "300", "paid_on": "2026-10-06",
@@ -71,7 +71,7 @@ def test_hint_data_includes_already_paid_for_project_and_corpus(seeded_db, admin
 
 
 def test_maintenance_stays_fixed_and_non_editable(seeded_db, owner_client):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     sheet = owner_client.get(f"/?view=simple&period_id={mp.period_id}&pay=m-{mp.period_id}-{mp.flat_id}").text
     assert 'id="amt-hint"' not in sheet and "data-partial" not in sheet
     assert f"₹{mp.amount}" in sheet  # the short hint line under the title still states the amount due
@@ -96,7 +96,7 @@ def test_payee_shown_in_order_as_plain_text_and_launch_only_phonepe(seeded_db, a
 
 def test_sheet_values_come_from_the_database_not_the_config(seeded_db, owner_client, monkeypatch):
     monkeypatch.setattr(settings, "upi_mobile", "9876543210")  # the config is only the initial seed
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     sheet = owner_client.get(f"/?view=simple&period_id={mp.period_id}&pay=m-{mp.period_id}-{mp.flat_id}").text
     assert '<dd id="pay-mobile">9940255076</dd>' in sheet and "9876543210" not in sheet
 
@@ -111,10 +111,10 @@ def test_script_validates_amount_and_hint_without_copy_or_qr_code(owner_client):
 
 
 def test_qr_payload_follows_partial_amount(seeded_db, owner_client):
-    own = _flat_id(seeded_db, "102")
-    r = owner_client.get(f"/upi/qr.svg?flat_id={own}&amount=5000&note=Flat%20102%20Project%20X")
+    own = _flat_id(seeded_db, "201")
+    r = owner_client.get(f"/upi/qr.svg?flat_id={own}&amount=5000&note=Flat%20201%20Project%20X")
     assert r.status_code == 200 and "<svg" in r.text
-    assert "am=5000.00" in upi_svc.build_link(5000, "Flat 102 Project X")
+    assert "am=5000.00" in upi_svc.build_link(5000, "Flat 201 Project X")
 
 
 @pytest.mark.parametrize("bad", ["0", "-5", "", "abc", "5000.5"])
@@ -135,7 +135,7 @@ def test_server_rejects_amount_above_remaining_for_project_and_corpus(seeded_db,
     seeded_db.expire_all()
     assert seeded_db.get(ProjectPayment, pp.id).paid == 0
 
-    own = _flat_id(seeded_db, "102")
+    own = _flat_id(seeded_db, "201")
     goal = _goal(admin_client, seeded_db, "Lift v9 over", 50000)
     share = next(s.share_amount for s in goal.shares if s.flat_id == own)
     for amount in (share + 1, 0, -1):

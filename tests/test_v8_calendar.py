@@ -126,7 +126,7 @@ def test_asset_tasks_and_completed_logs_in_month_items(seeded_db):
     seeded_db.commit()
     try:
         admin = cal.Viewer(is_admin=True)
-        owner = cal.Viewer(is_admin=False, flat_ids={_flat_id(seeded_db, "102")})
+        owner = cal.Viewer(is_admin=False, flat_ids={_flat_id(seeded_db, "201")})
         items = cal.month_items(seeded_db, today.year, today.month, admin, today)
         mine = [i for i in items if "Cal test pump" in i["title"]]
         tasks = [i for i in mine if i["type"] == "task"]
@@ -220,17 +220,17 @@ def test_maintenance_item_owner_sees_only_own_flats(seeded_db, admin_client, own
     today = date.today()
     if _period(seeded_db, today) is None:
         pytest.skip("current month not opened in the seed")
-    _set_paid(seeded_db, "102", False, today)
+    _set_paid(seeded_db, "201", False, today)
     _set_paid(seeded_db, "301", False, today)
     due = date(today.year, today.month, 5)
     mine = [i for i in _data(owner_client.get("/calendar").text).values() if i["type"] == "maintenance"]
-    assert [i["title"] for i in mine] == ["Flat 102 maintenance pending"]
+    assert [i["title"] for i in mine] == ["Flat 201 maintenance pending"]
     assert mine[0]["date"] == f"{due:%d-%m-%Y}"
     page = owner_client.get("/calendar").text
     assert "Flat 301" not in page and "Flat 101" not in page and "301 (" not in page
-    _set_paid(seeded_db, "102", True, today)
+    _set_paid(seeded_db, "201", True, today)
     again = [i for i in _data(owner_client.get("/calendar").text).values() if i["type"] == "maintenance"]
-    assert again[0]["title"] == "Flat 102 maintenance paid" and again[0]["status"] == "paid"
+    assert again[0]["title"] == "Flat 201 maintenance paid" and again[0]["status"] == "paid"
     adm = [i for i in _data(admin_client.get("/calendar").text).values() if i["type"] == "maintenance"]
     assert len(adm) == 1 and "pending" in adm[0]["title"] and any("301" in l for l in adm[0]["lines"])
 
@@ -242,7 +242,7 @@ def test_past_unpaid_maintenance_is_overdue(seeded_db):
     if period is None:
         pytest.skip("previous month not in the seed")
     mp = seeded_db.scalar(select(MaintenancePayment).where(MaintenancePayment.period_id == period.id,
-                                                           MaintenancePayment.flat_id == _flat_id(seeded_db, "102")))
+                                                           MaintenancePayment.flat_id == _flat_id(seeded_db, "201")))
     saved = (mp.is_paid, mp.paid_on)
     mp.is_paid, mp.paid_on = False, None
     seeded_db.commit()
@@ -263,7 +263,7 @@ def test_corpus_and_project_due_dates_without_leaking_other_flats(seeded_db, adm
     assert r.status_code == 303
     r = admin_client.post("/projects", data={"name": "Cal roof", "total_cost": "25000", "due_date": due}, follow_redirects=False)
     assert r.status_code == 303
-    own = _flat_id(seeded_db, "102")
+    own = _flat_id(seeded_db, "201")
     seeded_db.expire_all()
     from app.models import CorpusCampaign
     goal = seeded_db.scalar(select(CorpusCampaign).where(CorpusCampaign.name == "Cal lift fund"))
@@ -272,7 +272,7 @@ def test_corpus_and_project_due_dates_without_leaking_other_flats(seeded_db, adm
     project = next(i for i in owner_items.values() if i["type"] == "project" and "Cal roof" in i["title"])
     for item in (corpus, project):
         text = " ".join(item["lines"])
-        assert "Flat 102" in text and "remaining" in text
+        assert "Flat 201" in text and "remaining" in text
         for other in ("101", "301", "401", "501"):
             assert f"Flat {other}" not in text and f"{other} (" not in text
         assert item["status"] in ("pending",) and item["date"] == f"{today:%d-%m-%Y}"
@@ -297,7 +297,7 @@ def test_owner_without_share_in_a_goal_does_not_see_it(seeded_db, admin_client, 
     seeded_db.expire_all()
     goal = seeded_db.scalar(select(CorpusCampaign).where(CorpusCampaign.name == "Cal no-share goal"))
     for share in seeded_db.scalars(select(CorpusCampaignShare).where(CorpusCampaignShare.campaign_id == goal.id)).all():
-        if share.flat_id == _flat_id(seeded_db, "102"):
+        if share.flat_id == _flat_id(seeded_db, "201"):
             share.share_amount = 0
     seeded_db.commit()
     page = owner_client.get("/calendar").text
@@ -474,7 +474,7 @@ def test_migration_from_scratch_and_roundtrip(tmp_path):
     db = tmp_path / "fresh.db"
     done = _alembic(db, "upgrade", "head")
     assert done.returncode == 0, done.stderr
-    assert "calendar_events" in _tables(db) and _version(db) == "a3d9e6c1b852"
+    assert "calendar_events" in _tables(db) and _version(db) == "b4e7c2a9d531"
     with sqlite3.connect(db) as conn:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(calendar_events)")}
         idx = {r[1] for r in conn.execute("PRAGMA index_list(calendar_events)")}
@@ -498,7 +498,7 @@ def test_migration_tolerates_table_created_by_startup_safety_net(tmp_path):
     assert "calendar_events" in _tables(db)
     done = _alembic(db, "upgrade", "head")
     assert done.returncode == 0, done.stderr
-    assert _version(db) == "a3d9e6c1b852"
+    assert _version(db) == "b4e7c2a9d531"
 
 
 def _v7_db(tmp_path: Path) -> Path:
@@ -524,7 +524,7 @@ def test_migration_on_a_copy_of_the_v7_database(tmp_path):
                   if t in _tables(db)}
     done = _alembic(db, "upgrade", "head")
     assert done.returncode == 0, done.stderr
-    assert _version(db) == "a3d9e6c1b852" and "calendar_events" in _tables(db)
+    assert _version(db) == "b4e7c2a9d531" and "calendar_events" in _tables(db)
     with sqlite3.connect(db) as conn:
         after = {t: conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0] for t in before}
         assert conn.execute("SELECT COUNT(*) FROM calendar_events").fetchone()[0] == 0

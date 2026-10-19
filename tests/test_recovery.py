@@ -20,15 +20,15 @@ def _last_link() -> str:
 
 
 def test_reset_token_works_once(seeded_db, set_password):
-    user = set_password(seeded_db, "sastry", "old-password-1")
-    user.email = "sastry@example.com"
+    user = set_password(seeded_db, "asrk.sastry", "old-password-1")
+    user.email = "asrk.sastry@example.com"
     seeded_db.commit()
 
     client = TestClient(app)
-    r = client.post("/forgot-password", data={"login": "sastry@example.com"})
+    r = client.post("/forgot-password", data={"login": "asrk.sastry@example.com"})
     assert r.status_code == 200 and "outbox.log" in r.text
     outbox = Path(mailer.outbox_path()).read_text(encoding="utf-8")
-    assert "to: sastry@example.com" in outbox
+    assert "to: asrk.sastry@example.com" in outbox
     link = _last_link()
     token = link.split("token=")[1]
 
@@ -40,7 +40,7 @@ def test_reset_token_works_once(seeded_db, set_password):
         data={"token": token, "new_password": "fresh-password-9", "confirm_password": "fresh-password-9"},
     )
     assert r.status_code == 200 and "Password updated" in r.text
-    make_client("sastry", "fresh-password-9")
+    make_client("asrk.sastry", "fresh-password-9")
 
     # Single use.
     assert client.get(link).status_code == 400
@@ -49,11 +49,11 @@ def test_reset_token_works_once(seeded_db, set_password):
         data={"token": token, "new_password": "another-pass-1", "confirm_password": "another-pass-1"},
     )
     assert r.status_code == 400
-    make_client("sastry", "fresh-password-9")
+    make_client("asrk.sastry", "fresh-password-9")
 
 
 def test_reset_token_expires(seeded_db):
-    user = users_svc.get_by_username(seeded_db, "sastry")
+    user = users_svc.get_by_username(seeded_db, "asrk.sastry")
     raw = users_svc.create_reset_token(seeded_db, user)
     seeded_db.commit()
     assert users_svc.lookup_reset_token(seeded_db, raw) is not None

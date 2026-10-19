@@ -53,12 +53,12 @@ def _get_pdf(client, url, value):
 def test_pdf_every_timeline_single_flat(seeded_db, owner_client):
     flats = _flats(seeded_db)
     for value in _timeline_values(seeded_db):
-        r = _get_pdf(owner_client, f"/flats/{flats['102']}/statement.pdf", value)
+        r = _get_pdf(owner_client, f"/flats/{flats['201']}/statement.pdf", value)
         scope = "all-time" if not value or value == "all" else ""
         assert scope in r.headers["content-disposition"]
         _get_pdf(owner_client, "/owner/statement.pdf", value)
-    assert owner_client.get(f"/flats/{flats['102']}/statement.pdf?period_id=abc").status_code == 400
-    assert owner_client.get(f"/flats/{flats['102']}/statement.pdf?period_id=99999").status_code == 404
+    assert owner_client.get(f"/flats/{flats['201']}/statement.pdf?period_id=abc").status_code == 400
+    assert owner_client.get(f"/flats/{flats['201']}/statement.pdf?period_id=99999").status_code == 404
 
 
 def test_pdf_every_timeline_multiple_flats(seeded_db, set_password, admin_client):
@@ -71,6 +71,6 @@ def test_pdf_every_timeline_multiple_flats(seeded_db, set_password, admin_client
         r = _get_pdf(multi, "/owner/statement.pdf", value)
         assert "flats-101-401-" in r.headers["content-disposition"]
         _get_pdf(admin_client, "/owner/statement.pdf", value)
-    assert multi.get(f"/flats/{flats['102']}/statement.pdf?period_id=").status_code == 403
+    assert multi.get(f"/flats/{flats['201']}/statement.pdf?period_id=").status_code == 403
     page = multi.get(f"/flats/{flats['101']}").text
     assert '<option value="">All time</option>' in page and 'formaction="/owner/statement.pdf"' in page

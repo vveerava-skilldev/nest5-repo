@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.dates import format_ist_stamp
 from app.domain.flats import FLAT_ROSTER
 from app.models import Flat, PasswordResetToken, User, UserRole
 from app.services import audit as audit_svc
@@ -28,6 +29,7 @@ def user_snapshot(user: User) -> dict:
         "must_change_password": user.must_change_password,
         "flats": [f.number for f in user.flats],
         "tenant_payments": user.tenant_payments,
+        "deleted": user.deleted_at is not None,
     }
 
 
@@ -50,13 +52,13 @@ def get_by_login(db: Session, login: str) -> User | None:
         return None
     user = get_by_username(db, login)
     if user:
-        return user
-    return db.scalar(select(User).where(func.lower(User.email) == login.lower()))
+        return None if user.deleted_at is not None else user
+    return db.scalar(select(User).where(func.lower(User.email) == login.lower(), User.deleted_at.is_(None)))
 
 
 def authenticate(db: Session, username: str, password: str) -> User | None:
     user = get_by_username(db, username or ADMIN_USERNAME)
-    if not user or not user.is_active or not check_password(password, user.password_hash):
+    if not user or user.deleted_at is not None or not user.is_active or not check_password(password, user.password_hash):
         return None
     return user
 
@@ -103,7 +105,7 @@ def ensure_bootstrap_users(db: Session) -> list[tuple[str, str]]:
         flat = flats_by_number.get(profile.number)
         if not flat:
             continue
-        uname = owner_username(profile.owner_name)
+        uname = profile.username or owner_username(profile.owner_name)
         names[uname] = profile.owner_name
         owners.setdefault(uname, []).append(flat)
 
@@ -134,7 +136,7 @@ def ensure_bootstrap_users(db: Session) -> list[tuple[str, str]]:
 def _record_initial_passwords(created: list[tuple[str, str]], owners: dict[str, list[Flat]]) -> None:
     path = initial_passwords_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%d-%m-%Y %H:%M")
+    stamp = format_ist_stamp()
     lines = [
         f"# Nest5 owner accounts created {stamp}.",
         "# Temporary passwords — each owner must change theirs at first login.",
@@ -181,7 +183,7 @@ def lookup_reset_token(db: Session, raw: str) -> PasswordResetToken | None:
     tok = db.scalar(select(PasswordResetToken).where(PasswordResetToken.token_hash == _token_digest(raw)))
     if not tok or tok.used_at is not None or tok.expires_at < datetime.utcnow():
         return None
-    if not tok.user or not tok.user.is_active:
+    if not tok.user or not tok.user.is_active or tok.user.deleted_at is not None:
         return None
     return tok
 
@@ -202,3 +204,29 @@ def recovery_address(user: User) -> str | None:
     if user.role == UserRole.ADMIN.value:
         return settings.admin_recovery_email or user.email
     return user.email
+
+
+# ---- soft delete ------------------------------------------------------------------------------
+
+
+def soft_delete(db: Session, user: User, actor: str) -> None:
+    """Hide the account and block login. Nothing is removed: the row, flat links, payments, submissions,
+    audit entries and the username all stay. Open password-reset links are retired (not deleted)."""
+    now = datetime.utcnow()
+    user.deleted_at, user.deleted_by, user.is_active = now, actor, False
+    for tok in db.scalars(
+        select(PasswordResetToken).where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
+    ).all():
+        tok.used_at = now
+    db.flush()
+
+
+def restore(db: Session, user: User) -> str:
+    """Bring the same account back (same role and flats) on a new temporary password."""
+    from app.services.auth import generate_temp_password
+
+    temp = generate_temp_password()
+    user.deleted_at, user.deleted_by, user.is_active = None, None, True
+    set_password(user, temp, must_change=True)
+    db.flush()
+    return temp

@@ -74,6 +74,15 @@
               </form>
               {% endif %}
             </div>
+            {% if u.id != current_user_id %}
+            <form method="post" action="/admin/users/{{ u.id }}/delete" class="user-delete" style="margin-top:0.75rem"
+                  onsubmit="return confirm('Permanently delete {{ u.username }}? This cannot be undone.')">
+              <label>Delete this user: type <strong>{{ u.username }}</strong> to confirm<br>
+                <input name="confirm_username" autocomplete="off" autocapitalize="none" placeholder="{{ u.username }}" required></label>
+              <button type="submit" class="danger">Delete user</button>
+              <small style="color:var(--muted);display:block">Soft delete: they cannot sign in and disappear from this list, but every record stays and you can restore them.</small>
+            </form>
+            {% endif %}
           </details>
         </td>
       </tr>
@@ -82,11 +91,31 @@
   </table>
 </div>
 
+{% if deleted_users %}
+<details class="card no-print deleted-users">
+  <summary><strong>Deleted users ({{ deleted_users|length }})</strong></summary>
+  <p style="color:var(--muted)">Their payments, submissions and audit entries are kept, and their username stays reserved. Restore brings back the same account, role and flats on a new temporary password.</p>
+  <table>
+    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Flats</th><th>Deleted</th><th></th></tr></thead>
+    <tbody>
+    {% for u in deleted_users %}
+      <tr>
+        <td><strong>{{ u.username }}</strong></td><td>{{ u.display_name or '—' }}</td><td>{{ u.role }}</td>
+        <td>{% for f in u.flats %}{{ f.number }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}</td>
+        <td>{{ u.deleted_at|ist }} by {{ u.deleted_by or '—' }}</td>
+        <td><form method="post" action="/admin/users/{{ u.id }}/restore" onsubmit="return confirm('Restore {{ u.username }}?')"><button type="submit">Restore</button></form></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+
 <div class="card no-print">
   <h3 style="margin-top:0">Create user</h3>
   <form method="post" action="/admin/users">
     <div class="expense-form-grid">
-      <label>Username<br><input name="username" required autocapitalize="none" placeholder="e.g. sastry"></label>
+      <label>Username<br><input name="username" required autocapitalize="none" placeholder="e.g. first.last"></label>
       <label>Name<br><input name="display_name" placeholder="Full name"></label>
       <label>Email<br><input name="email" type="email" placeholder="For password reset"></label>
       <label>Role<br>

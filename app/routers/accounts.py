@@ -198,11 +198,15 @@ def account_password_submit(
 
 
 def _users_context(request: Request, db: Session, **extra) -> dict:
-    users = db.scalars(select(User).order_by(User.role, User.username)).all()
+    everyone = db.scalars(select(User).order_by(User.role, User.username)).all()
+    users = [u for u in everyone if not u.is_deleted]
+    deleted_users = sorted((u for u in everyone if u.is_deleted), key=lambda u: u.deleted_at, reverse=True)
     flats = db.scalars(select(Flat).order_by(Flat.number)).all()
     return {
         "request": request,
         "users": users,
+        "deleted_users": deleted_users,
+        "current_user_id": getattr(request.state, "user_id", None),
         "flats": flats,
         "roles": [r.value for r in UserRole],
         "tenant_sections": tenant_svc.SECTIONS,
@@ -228,10 +232,10 @@ def _flats_from_ids(db: Session, flat_ids: list[int]) -> list[Flat]:
     return list(db.scalars(select(Flat).where(Flat.id.in_(flat_ids)).order_by(Flat.number)).all())
 
 
-def _get_user(db: Session, user_id: int) -> User:
+def _get_user(db: Session, user_id: int, include_deleted: bool = False) -> User:
     user = db.get(User, user_id)
-    if not user:
-        raise HTTPException(404)
+    if not user or (user.is_deleted and not include_deleted):
+        raise HTTPException(404, "No such user (deleted users must be restored first).")
     return user
 
 
@@ -256,7 +260,14 @@ def admin_user_create(
         raise HTTPException(400, "Unknown role")
     if not username or not username.replace(".", "").replace("_", "").replace("-", "").isalnum():
         return _render_users(request, db, 400, error="Username may use letters, digits, '.', '_' and '-'.")
-    if users_svc.get_by_username(db, username):
+    existing = users_svc.get_by_username(db, username)
+    if existing and existing.is_deleted:
+        return _render_users(
+            request, db, 400,
+            error=f"Username '{username}' belongs to a deleted user and stays reserved so their history keeps its name. "
+                  "Restore that user from Deleted users, or choose another username.",
+        )
+    if existing:
         return _render_users(request, db, 400, error=f"Username '{username}' already exists.")
     temp = generate_temp_password()
     user = User(
@@ -337,6 +348,46 @@ def admin_user_enable(request: Request, user_id: int, db: Session = Depends(get_
     audit_svc.log_audit(db, entity_type="user", entity_id=user.id, action="enable", before=before, after=users_svc.user_snapshot(user))
     db.commit()
     return _render_users(request, db, message=f"Enabled '{user.username}'.")
+
+
+@router.post("/admin/users/{user_id}/delete", response_class=HTMLResponse)
+def admin_user_delete(
+    request: Request,
+    user_id: int,
+    confirm_username: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user = _get_user(db, user_id)
+    if user.id == request.state.user_id:
+        return _render_users(request, db, 400, error="You cannot delete your own account.")
+    if user.role == UserRole.ADMIN.value and user.is_active and users_svc.active_admin_count(db) <= 1:
+        return _render_users(request, db, 400, error="Cannot delete the last active admin.")
+    if confirm_username.strip().lower() != user.username.lower():
+        return _render_users(request, db, 400, error=f"Nothing deleted: type the username '{user.username}' exactly to confirm.")
+    before = users_svc.user_snapshot(user)
+    users_svc.soft_delete(db, user, getattr(request.state, "username", "admin"))
+    audit_svc.log_audit(db, entity_type="user", entity_id=user.id, action="delete", before=before, after=users_svc.user_snapshot(user))
+    db.commit()
+    return _render_users(
+        request, db,
+        message=f"Deleted user '{user.username}'. They can no longer sign in; every record stays and you can restore them below under Deleted users.",
+    )
+
+
+@router.post("/admin/users/{user_id}/restore", response_class=HTMLResponse)
+def admin_user_restore(request: Request, user_id: int, db: Session = Depends(get_db)):
+    user = _get_user(db, user_id, include_deleted=True)
+    if not user.is_deleted:
+        return _render_users(request, db, 400, error=f"'{user.username}' is not deleted.")
+    before = users_svc.user_snapshot(user)
+    temp = users_svc.restore(db, user)
+    audit_svc.log_audit(db, entity_type="user", entity_id=user.id, action="restore", before=before, after=users_svc.user_snapshot(user))
+    db.commit()
+    return _render_users(
+        request, db,
+        message=f"Restored '{user.username}' with the same role and flats. They must change this temporary password at first sign-in.",
+        temp_password=(user.username, temp),
+    )
 
 
 @router.post("/admin/users/{user_id}/reset-password", response_class=HTMLResponse)

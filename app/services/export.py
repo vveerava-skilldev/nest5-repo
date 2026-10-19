@@ -5,6 +5,7 @@ import io
 import json
 import zipfile
 from datetime import date, datetime
+
 from typing import Any
 
 import sqlalchemy as sa
@@ -14,6 +15,7 @@ from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session
 
 from app.database import Base
+from app.dates import display_dates_in_text, format_date, format_datetime, format_ist_stamp
 from app.models import entities  # noqa: F401  (registers every table on Base.metadata)
 
 DUMP_FORMAT = "nest5-ledger-dump"
@@ -55,6 +57,8 @@ def fetch_rows(db: Session, table: sa.Table, *, reports: bool = False) -> list[d
             q = q.where(table.c.reverted_at.is_(None), table.c.expense_id.in_(counted))
         elif table.name == "submission_rejections":
             q = q.where(sa.false())
+        elif table.name == "users" and "deleted_at" in table.c:
+            q = q.where(table.c.deleted_at.is_(None))
     return [dict(r._mapping) for r in db.execute(q)]
 
 
@@ -101,7 +105,7 @@ def build_xlsx(db: Session) -> bytes:
     info.title = "About"
     info.append(["Nest5 Ledger export"])
     info["A1"].font = Font(bold=True, size=14)
-    info.append(["Exported at", datetime.now().strftime("%d-%m-%Y %H:%M")])
+    info.append(["Exported at", format_ist_stamp()])
     info.append(["Schema version", schema_version(db) or "—"])
     info.append([])
     info.append(["Sheet", "Rows"])
@@ -122,6 +126,8 @@ def build_xlsx(db: Session) -> bytes:
                     v = v.value
                 elif isinstance(v, bool):
                     v = "Yes" if v else "No"
+                elif c.name.endswith("_json") and isinstance(v, str):
+                    v = display_dates_in_text(v)
                 out.append(v)
             ws.append(out)
         for idx, c in enumerate(cols, start=1):
@@ -159,7 +165,15 @@ def build_csv_zip(db: Session) -> bytes:
             for row in fetch_rows(db, t, reports=True):
                 out = []
                 for c in cols:
-                    v = _raw(row[c.name])
+                    v = row[c.name]
+                    if isinstance(v, datetime):
+                        v = format_datetime(v)
+                    elif isinstance(v, date):
+                        v = format_date(v)
+                    else:
+                        v = _raw(v)
+                    if c.name.endswith("_json") and isinstance(v, str):
+                        v = display_dates_in_text(v)
                     if isinstance(v, bool):
                         v = int(v)
                     out.append("" if v is None else v)
@@ -168,7 +182,7 @@ def build_csv_zip(db: Session) -> bytes:
         zf.writestr(
             "README.txt",
             "Nest5 Ledger CSV export — one file per table, header row = column names.\n"
-            "Dates are ISO (YYYY-MM-DD, timestamps YYYY-MM-DDTHH:MM:SS), booleans 1/0,\n"
+            "Dates are dd-mm-yyyy (timestamps dd-mm-yyyy HH:MM, as stored: UTC), booleans 1/0,\n"
             "empty cell = NULL. Password hashes are omitted; use the JSON dump for a full restore.\n",
         )
     return buf.getvalue()

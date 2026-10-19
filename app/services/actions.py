@@ -22,6 +22,7 @@ from app.services import recurring as recurring_svc
 from app.services import reminders as reminders_svc
 from app.services import schedule as schedule_svc
 from app.services import submission_review as review_svc
+from app.dates import format_date as fmt_date, format_datetime as fmt_datetime
 
 SECTIONS = (
     ("review", "Needs your review", ("submissions", "cancel_requests")),
@@ -73,7 +74,7 @@ def build(db: Session, today: date | None = None) -> dict:
 
     corpus_rows = [
         {"text": f"Flat {d['flat'].number}: ₹{d['remaining']} left on {d['campaign'].name}",
-         "detail": f"Due {d['due_date']:%d-%m-%Y}", "link": f"/corpus/goals/{d['campaign'].id}", "cta": "Open goal"}
+         "detail": f"Due {fmt_date(d['due_date'])}", "link": f"/corpus/goals/{d['campaign'].id}", "cta": "Open goal"}
         for d in campaigns_svc.dues_for_flats(db, None, today) if d["due_date"] and d["due_date"] < today]
     group("corpus", "Overdue corpus", "/corpus", sorted(corpus_rows, key=lambda r: r["text"]), severity="critical")
 
@@ -85,34 +86,34 @@ def build(db: Session, today: date | None = None) -> dict:
     ).all():
         if pp.remaining > 0:
             project_rows.append({"text": f"Flat {pp.flat.number}: ₹{pp.remaining} left on {pp.project.name}",
-                                 "detail": f"Due {pp.project.due_date:%d-%m-%Y}", "link": f"/projects/{pp.project_id}",
-                                 "cta": "Open project"})
+                                 "detail": f"Due {fmt_date(pp.project.due_date)}",
+                                 "link": f"/projects/{pp.project_id}", "cta": "Open project"})
     group("projects", "Overdue project shares", "/payments/projects", sorted(project_rows, key=lambda r: r["text"]),
           severity="critical")
 
     recurring_rows = []
     for item in recurring_svc.open_occurrences(db, today):
         occ, task = item["occurrence"], item["task"]
-        when = (f"overdue since {item['due_date']:%d-%m-%Y}" if item["status"] == "overdue"
-                else ("due today" if item["days"] == 0 else f"due {item['due_date']:%d-%m-%Y}, in {item['days']} day(s)"))
+        when = (f"overdue since {fmt_date(item['due_date'])}" if item["status"] == "overdue"
+                else ("due today" if item["days"] == 0 else f"due {fmt_date(item['due_date'])}, in {item['days']} day(s)"))
         recurring_rows.append({
             "text": f"{task.title} ({occ.month:02d}-{occ.year})",
             "detail": f"{recurring_svc.due_label(task)} · {when}",
-            "link": "/admin/recurring", "cta": "Mark done", "recurring_id": occ.id,
-            "overdue": item["status"] == "overdue"})
+            "overdue": item["status"] == "overdue",
+            "link": "/admin/recurring", "cta": "Mark done", "recurring_id": occ.id})
     group("recurring", "Recurring tasks due", "/admin/recurring", recurring_rows,
           severity="critical" if any(r["overdue"] for r in recurring_rows) else "warning")
 
     buckets = schedule_svc.schedule_buckets(db)
     group("assets", "Overdue asset tasks", "/schedule", [
-        {"text": f"{t.asset}: {t.task}", "detail": f"Was due {t.next_due_on:%d-%m-%Y}",
+        {"text": f"{t.asset}: {t.task}", "detail": f"Was due {fmt_date(t.next_due_on)}",
          "link": f"/assets/{t.asset_id}" if t.asset_id else "/schedule", "cta": "Mark done"}
         for t in buckets["overdue"]], severity="critical")
 
     subs = review_svc.pending(db)
     group("submissions", "New owner submissions to review", "/admin/actions", [
         {"text": f"{it['what']} · {it['flat']} · ₹{it['amount']}",
-         "detail": f"{it['when']:%d-%m-%Y %H:%M} · by {it['user']}",
+         "detail": f"{fmt_datetime(it['when'])} · by {it['user']}",
          "link": it["link"], "cta": "Open",
          "review": {"audit_id": it["audit_id"], "kind": it["kind"], "record_id": it["record_id"]}} for it in subs],
         severity="info", empty="No new owner submissions.", action="mark_reviewed" if subs else None)

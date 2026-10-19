@@ -117,7 +117,7 @@ async def access_guard(request: Request, db: Session = Depends(get_db)) -> None:
 
     user_id = request.session.get("user_id")
     user = db.get(User, user_id) if user_id else None
-    if not user or not user.is_active:
+    if not user or not user.is_active or user.deleted_at is not None:
         # Pre-RBAC session cookie or a disabled/removed account: sign in again.
         request.session.clear()
         raise _to_login(request)

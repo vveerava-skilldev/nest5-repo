@@ -64,6 +64,8 @@ from app.services.auth import require_auth
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+templates.env.filters["weekday_date"] = dates_util.format_weekday_date
+templates.env.filters["display_dates"] = dates_util.display_dates_in_text
 templates.env.filters["format_date"] = dates_util.format_date_ddmmyyyy
 templates.env.filters["iso_date"] = dates_util.date_to_iso
 templates.env.filters["format_datetime"] = dates_util.format_datetime_ddmmyyyy

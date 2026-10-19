@@ -24,6 +24,7 @@ from app.services import ledger as ledger_svc
 from app.services import recurring as recurring_svc
 from app.services import reminders as reminders_svc
 from app.services import schedule as schedule_svc
+from app.dates import format_date as fmt_date
 
 EVENT_TYPES = ("Meeting", "AGM", "Vendor visit", "Reminder", "Maintenance reminder", "Other")
 
@@ -137,7 +138,7 @@ def _task_items(db: Session, start: date, end: date, today: date, viewer: Viewer
             lines = [f"Asset: {asset_name}", f"Repeats: {task.frequency.value}"
                      + (f" every {task.custom_interval_days} days" if task.frequency.value == "custom" and task.custom_interval_days else "")]
             if task.last_done_on:
-                lines.append(f"Last done: {task.last_done_on:%d-%m-%Y}")
+                lines.append(f"Last done: {fmt_date(task.last_done_on)}")
             if task.vendor:
                 lines.append(f"Vendor: {task.vendor}")
             if projected:
@@ -200,8 +201,8 @@ def _maintenance_items(db: Session, year: int, month: int, today: date, viewer: 
                 type="maintenance", title=f"Flat {mp.flat.number} maintenance {'paid' if paid else 'pending'}",
                 day=last, status=status, link=link, link_label="Open payments", ident=f"maint-{year}{month:02d}-{mp.flat_id}",
                 lines=[f"Month: {label}", f"Amount: ₹{mp.amount}",
-                       "Paid" + (f" on {mp.paid_on:%d-%m-%Y}" if mp.paid_on else "") if paid
-                       else (f"Overdue: due date {last:%d-%m-%Y} has passed." if month_over else f"Due on {last:%d-%m-%Y}.")]))
+                       "Paid" + (f" on {fmt_date(mp.paid_on)}" if mp.paid_on else "") if paid
+                       else (f"Overdue: due date {fmt_date(last)} has passed." if month_over else f"Due on {fmt_date(last)}.")]))
         return out
 
     pending = [r for r in rows if not r.is_paid]
@@ -291,7 +292,7 @@ def _recurring_items(db: Session, year: int, month: int, today: date, viewer: Vi
         task, occ, status = row["task"], row["occurrence"], row["status"]
         lines = [f"Repeats: {recurring_svc.repeat_label(task).lower()}, {recurring_svc.due_label(task)}"]
         if occ is not None and occ.done_on:
-            lines.append(f"Done on {occ.done_on:%d-%m-%Y}" + (f" · ₹{occ.amount}" if occ.amount is not None else ""))
+            lines.append(f"Done on {fmt_date(occ.done_on)}" + (f" · ₹{occ.amount}" if occ.amount is not None else ""))
             if occ.note:
                 lines.append(f"Note: {occ.note}")
         elif status == "overdue":
@@ -330,7 +331,7 @@ def _event_items(db: Session, start: date, end: date, viewer: Viewer) -> list[di
     for ev in _events_in_range(db, start, end, viewer):
         lines = [f"Type: {ev.event_type}"]
         if ev.end_date and ev.end_date > ev.event_date:
-            lines.append(f"Until: {ev.end_date:%d-%m-%Y}")
+            lines.append(f"Until: {fmt_date(ev.end_date)}")
         if time_label(ev):
             lines.append(f"Time: {time_label(ev)}")
         if ev.notes:
@@ -407,8 +408,8 @@ def json_item(item: dict) -> dict:
     """What the details panel receives: dates already in dd-mm-yyyy."""
     return {
         "id": item["id"], "type": item["type"], "type_label": item["type_label"], "title": item["title"],
-        "date": item["date"].strftime("%d-%m-%Y"),
-        "end_date": item["end_date"].strftime("%d-%m-%Y") if item["end_date"] else None,
+        "date": fmt_date(item["date"]),
+        "end_date": fmt_date(item["end_date"]) if item["end_date"] else None,
         "time": item["time"], "status": item["status"], "lines": item["lines"], "link": item["link"],
         "link_label": item["link_label"], "projected": item["projected"], "event_id": item["event_id"],
     }

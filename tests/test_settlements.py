@@ -129,7 +129,7 @@ def test_owner_maintenance_submit_disabled_when_paid(admin_client, seeded_db, se
     assert m
     assert f'"{flats["101"]}:{period.id}": "10-10-2026"' in m.group(1)
     assert f'"{flats["401"]}:{period.id}"' not in m.group(1)  # unpaid → Submit enabled for 401
-    assert f'"{flats["102"]}:' not in m.group(1)  # other owners' flats are not exposed
+    assert f'"{flats["201"]}:' not in m.group(1)  # other owners' flats are not exposed
 
     # Server still refuses an already-paid month even if the button is bypassed.
     r = owner.post(

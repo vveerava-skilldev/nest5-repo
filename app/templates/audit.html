@@ -16,8 +16,8 @@
         {% if raw.before_json or raw.after_json %}
         <details class="audit-details">
           <summary>Details</summary>
-          <div class="audit-raw"><strong>Before</strong><code>{{ raw.before_json or '—' }}</code></div>
-          <div class="audit-raw"><strong>After</strong><code>{{ raw.after_json or '—' }}</code></div>
+          <div class="audit-raw"><strong>Before</strong><code>{{ (raw.before_json or '—')|display_dates }}</code></div>
+          <div class="audit-raw"><strong>After</strong><code>{{ (raw.after_json or '—')|display_dates }}</code></div>
         </details>
         {% endif %}
       </div>

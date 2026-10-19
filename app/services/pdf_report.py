@@ -11,7 +11,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.dates import format_date_ddmmyyyy as ddmmyyyy
+from app.dates import format_date_ddmmyyyy as ddmmyyyy, format_ist_stamp
 from app.models import (
     CorpusPayment,
     Expense,
@@ -100,7 +100,7 @@ def build_summary_pdf(db: Session, period: LedgerPeriod | None) -> bytes:
 
     story = [
         Paragraph(f"{PORTAL_NAME} — Summary report", styles["Title"]),
-        Paragraph(f"<b>{scope}</b> · generated {datetime.now().strftime('%d-%m-%Y %H:%M')}", styles["Normal"]),
+        Paragraph(f"<b>{scope}</b> · generated {format_ist_stamp()}", styles["Normal"]),
         Spacer(1, 6 * mm),
         Paragraph("Balances", styles["Heading2"]),
     ]
@@ -199,7 +199,7 @@ def build_flat_statement_pdf(db: Session, flats: list[Flat], period: LedgerPerio
     scope = ledger_svc.month_label(period) if period else "All time"
     story = [
         Paragraph(f"{escape(PORTAL_NAME)} — Flat statement", styles["Title"]),
-        Paragraph(f"<b>{escape(scope)}</b> · generated {datetime.now().strftime('%d-%m-%Y %H:%M')}", styles["Normal"]),
+        Paragraph(f"<b>{escape(scope)}</b> · generated {format_ist_stamp()}", styles["Normal"]),
         Spacer(1, 5 * mm),
     ]
 

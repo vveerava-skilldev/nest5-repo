@@ -334,8 +334,17 @@ def _status_cell(*, has_items: bool, pending_amount: int, display_amount: int) -
     }
 
 
-def build_dashboard_status(db: Session, period: LedgerPeriod | None) -> dict:
-    """Per-flat payment status for dashboard: maintenance (period), corpus (all open collections), projects (active)."""
+def build_dashboard_status(db: Session, period: LedgerPeriod | None, today: date | None = None) -> dict:
+    """Per-flat payment status for dashboard: maintenance (period), corpus (all open collections), projects (active).
+
+    `due_headers` holds the due dates shown once under each column name (never per flat): maintenance for the
+    viewed month (the 5th), each open corpus goal that has a due date, and each project that has one. Each entry
+    is overdue only while something is still unpaid and its date has passed."""
+    from app.dates import ist_today
+    from app.services import reminders as reminders_svc
+
+    today = today or ist_today()
+    maintenance_due = reminders_svc.maintenance_due_date(period) if period else None
     flats = list(db.scalars(select(Flat).order_by(Flat.number)).all())
     projects = list(
         db.scalars(
@@ -361,7 +370,7 @@ def build_dashboard_status(db: Session, period: LedgerPeriod | None) -> dict:
 
     project_totals: dict[int, int] = {p.id: 0 for p in projects}
     campaign_summaries = [
-        campaigns_svc.campaign_summary(db, c) for c in campaigns_svc.active_campaigns(db)
+        campaigns_svc.campaign_summary(db, c, today) for c in campaigns_svc.active_campaigns(db)
     ]
     campaign_totals: dict[int, int] = {c["campaign"].id: 0 for c in campaign_summaries}
     rows: list[dict] = []
@@ -457,7 +466,21 @@ def build_dashboard_status(db: Session, period: LedgerPeriod | None) -> dict:
             }
         )
 
+    def _header(due, unpaid, **extra):
+        return {"due": due, "overdue": bool(due and unpaid and due < today), **extra}
+
+    maintenance_unpaid = sum(1 for mp in maintenance_by_flat.values() if not mp.is_paid)
+    due_headers = {
+        "maintenance": _header(maintenance_due, maintenance_unpaid) if maintenance_by_flat else None,
+        "corpus": [
+            _header(c["campaign"].due_date, campaign_totals[c["campaign"].id], name=c["campaign"].name)
+            for c in campaign_summaries if c["campaign"].due_date
+        ],
+        "projects": {p.id: _header(p.due_date, project_totals.get(p.id, 0)) for p in projects if p.due_date},
+    }
+
     return {
+        "due_headers": due_headers,
         "projects": projects,
         "campaigns": [c["campaign"] for c in campaign_summaries],
         "rows": rows,

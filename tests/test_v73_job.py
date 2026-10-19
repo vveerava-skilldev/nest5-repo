@@ -18,7 +18,7 @@ def test_page_load_creates_the_new_month_for_every_flat_and_dues_are_due_on_the_
     code = r'''
 db.expire_all()
 out["before"] = period_row(2026, 11) is None
-owner = login("sastry")
+owner = login("asrk.sastry")
 simple = owner.get("/?view=simple")
 out["simple_status"] = simple.status_code
 db.expire_all()
@@ -44,7 +44,7 @@ out["idempotent"] = [db.scalar(select(func.count()).select_from(MaintenancePayme
 out["fund_unchanged"] = ledger_svc.compute_fund_balance(db) == f1
 # not overdue on the 5th itself, overdue from the 6th
 from app.services import reminders as rem
-flat_id = db.scalar(select(User).where(User.username == "sastry")).flats[0].id
+flat_id = db.scalar(select(User).where(User.username == "asrk.sastry")).flats[0].id
 def status():
     items = rem.reminders_for_flats(db, [flat_id])["items"]
     return [(i["label"], i["status"]) for i in items if i["kind"] == "Maintenance" and "November" in i["label"]]

@@ -519,8 +519,15 @@ class User(Base):
     dashboard_view: Mapped[str | None] = mapped_column(String(10), nullable=True)
     # Tenants only: comma list of payment sections the admin has switched on (default: maintenance).
     tenant_payments: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Soft delete: the row, flat links and every record that points here stay; the account is also inactive.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deleted_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
     flats: Mapped[list["Flat"]] = relationship(secondary=user_flats, order_by="Flat.number")
+
+    @property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None
 
 
 class PasswordResetToken(Base):

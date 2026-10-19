@@ -1,54 +1,43 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.domain.flats import FLAT_ROSTER, FlatProfile
-from app.models import (
-    CorpusPayment,
-    Expense,
-    Flat,
-    MaintenancePayment,
-    ProjectContribution,
-    ProjectPayment,
-)
+from app.domain.flats import FLAT_ROSTER, LEGACY_FLAT_NUMBERS, LEGACY_OWNER_NAMES, FlatProfile
+from app.models import Flat
 
 
 def apply_owner_profile(flat: Flat, profile: FlatProfile) -> None:
-    flat.contact_name = profile.owner_name
-    flat.owner_notes = profile.owner_notes
-    if flat.contact_phone is None:
-        flat.contact_phone = None
+    """Fill in what is missing; never overwrite a name or note the admin has edited."""
+    if not (flat.contact_name or "").strip():
+        flat.contact_name = profile.owner_name
+    if flat.owner_notes is None and profile.owner_notes is not None:
+        flat.owner_notes = profile.owner_notes
 
 
-def _reassign_flat_id(db: Session, from_id: int, to_id: int) -> None:
-    for model, attr in (
-        (MaintenancePayment, "flat_id"),
-        (CorpusPayment, "flat_id"),
-        (ProjectPayment, "flat_id"),
-        (ProjectContribution, "flat_id"),
-        (Expense, "paid_by_flat_id"),
-    ):
-        rows = db.scalars(select(model).where(getattr(model, attr) == from_id)).all()
-        for row in rows:
-            setattr(row, attr, to_id)
+def _renumber_legacy_flats(db: Session) -> None:
+    """Old databases numbered a roster flat differently (102, now 201): renumber it once, keeping its id.
 
-
-def migrate_flat_number(db: Session, old_number: str, new_number: str) -> None:
-    old = db.scalar(select(Flat).where(Flat.number == old_number))
-    if not old:
-        return
-    existing = db.scalar(select(Flat).where(Flat.number == new_number))
-    if existing and existing.id != old.id:
-        _reassign_flat_id(db, old.id, existing.id)
-        db.delete(old)
+    Only when the current number does not exist yet, so a database that is already on the new
+    number (or has both) is left alone, and later restarts find nothing to do.
+    """
+    for old_number, new_number in LEGACY_FLAT_NUMBERS.items():
+        old = db.scalar(select(Flat).where(Flat.number == old_number))
+        if old is None or db.scalar(select(Flat).where(Flat.number == new_number)) is not None:
+            continue
+        old.number = new_number
+        legacy_name = LEGACY_OWNER_NAMES.get(new_number)
+        profile = next((p for p in FLAT_ROSTER if p.number == new_number), None)
+        if profile and legacy_name and (old.contact_name or "").strip() == legacy_name:
+            old.contact_name = profile.owner_name
         db.flush()
-        return
-    old.number = new_number
-    db.flush()
 
 
 def sync_flat_roster(db: Session) -> None:
-    """Ensure roster numbers, owners, and legacy 201 → 102 migration."""
-    migrate_flat_number(db, "201", "102")
+    """Make sure every roster flat exists. Idempotent; runs on every start.
+
+    Creates missing flats with the roster owner, renumbers a legacy flat once, and fills in an empty
+    owner name or note. It never renames a flat or overwrites a name the admin has edited.
+    """
+    _renumber_legacy_flats(db)
 
     by_number = {f.number: f for f in db.scalars(select(Flat)).all()}
     for profile in FLAT_ROSTER:
@@ -59,11 +48,6 @@ def sync_flat_roster(db: Session) -> None:
             db.flush()
             by_number[profile.number] = flat
         apply_owner_profile(flat, profile)
-
-    allowed = {p.number for p in FLAT_ROSTER}
-    for num, flat in list(by_number.items()):
-        if num not in allowed and num != "201":
-            pass  # keep unexpected flats; do not delete historical data
 
     db.flush()
 

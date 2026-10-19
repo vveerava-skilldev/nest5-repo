@@ -110,13 +110,13 @@ def test_owner_cannot_submit_for_other_flats(owner_client, seeded_db):
 def test_owner_maintenance_submission_counts_immediately(admin_client, owner_client, seeded_db):
     flats = _flats(seeded_db)
     oct_p = _oct(seeded_db)
-    mp = _mp(seeded_db, oct_p.id, flats["102"])
+    mp = _mp(seeded_db, oct_p.id, flats["201"])
     admin_client.post(f"/maintenance/{mp.id}/revert")
-    mp = _mp(seeded_db, oct_p.id, flats["102"])
+    mp = _mp(seeded_db, oct_p.id, flats["201"])
     assert mp.is_paid is False
     fee = mp.amount
     collected_before = ledger_svc.maintenance_collected(seeded_db, oct_p.id)
-    owed_before = ledger_svc.flat_balances(seeded_db, seeded_db.get(Flat, flats["102"]))["owed_maintenance"]
+    owed_before = ledger_svc.flat_balances(seeded_db, seeded_db.get(Flat, flats["201"]))["owed_maintenance"]
     assert owed_before >= fee
 
     page = owner_client.get(f"/payments/maintenance?period_id={oct_p.id}")
@@ -126,7 +126,7 @@ def test_owner_maintenance_submission_counts_immediately(admin_client, owner_cli
     r = owner_client.post(
         "/owner/maintenance",
         data={
-            "flat_id": flats["102"],
+            "flat_id": flats["201"],
             "period_id": oct_p.id,
             "paid_on": "2026-10-12",
             "amount": "",
@@ -136,17 +136,17 @@ def test_owner_maintenance_submission_counts_immediately(admin_client, owner_cli
         follow_redirects=False,
     )
     assert r.status_code == 303 and "owner_msg" in r.headers["location"]
-    mp = _mp(seeded_db, oct_p.id, flats["102"])
+    mp = _mp(seeded_db, oct_p.id, flats["201"])
     assert mp.is_paid and mp.amount == fee and mp.payment_mode == "UPI"
-    assert mp.submitted_by.username == "sastry"
+    assert mp.submitted_by.username == "asrk.sastry"
     assert ledger_svc.maintenance_collected(seeded_db, oct_p.id) == collected_before + fee
-    flat = seeded_db.get(Flat, flats["102"])
+    flat = seeded_db.get(Flat, flats["201"])
     assert ledger_svc.flat_balances(seeded_db, flat)["owed_maintenance"] == owed_before - fee
 
     # Second submission for the same month is refused.
     r = owner_client.post(
         "/owner/maintenance",
-        data={"flat_id": flats["102"], "period_id": oct_p.id, "paid_on": "2026-10-12"},
+        data={"flat_id": flats["201"], "period_id": oct_p.id, "paid_on": "2026-10-12"},
         follow_redirects=False,
     )
     assert "owner_error" in r.headers["location"]
@@ -156,7 +156,7 @@ def test_owner_maintenance_submission_counts_immediately(admin_client, owner_cli
     log = seeded_db.scalars(
         select(AuditLog).where(AuditLog.entity_type == "maintenance_payment", AuditLog.action == "owner_submit")
     ).all()[-1]
-    assert log.user_label == "sastry"
+    assert log.user_label == "asrk.sastry"
 
 
 def test_multi_flat_owner_submits_for_both_flats(admin_client, seeded_db, set_password):
@@ -179,7 +179,7 @@ def test_multi_flat_owner_submits_for_both_flats(admin_client, seeded_db, set_pa
         assert mp.is_paid and mp.amount == fee and mp.payment_mode == "Cash"
     r = client.post(
         "/owner/maintenance",
-        data={"flat_id": flats["102"], "period_id": oct_p.id, "paid_on": "2026-10-11"},
+        data={"flat_id": flats["201"], "period_id": oct_p.id, "paid_on": "2026-10-11"},
         follow_redirects=False,
     )
     assert r.status_code == 403
@@ -187,12 +187,12 @@ def test_multi_flat_owner_submits_for_both_flats(admin_client, seeded_db, set_pa
 
 def test_owner_expense_lands_as_unsettled_advance(owner_client, admin_client, seeded_db):
     flats = _flats(seeded_db)
-    flat = seeded_db.get(Flat, flats["102"])
+    flat = seeded_db.get(Flat, flats["201"])
     adv_before = ledger_svc.flat_balances(seeded_db, flat)["reimbursement_due"]
     r = owner_client.post(
         "/owner/expenses",
         data={
-            "flat_id": flats["102"],
+            "flat_id": flats["201"],
             "description": "Bulbs for stairs",
             "category": "Not a real category",
             "amount": "640",
@@ -203,16 +203,16 @@ def test_owner_expense_lands_as_unsettled_advance(owner_client, admin_client, se
     assert r.status_code == 303 and "owner_msg" in r.headers["location"]
     seeded_db.expire_all()
     exp = seeded_db.scalar(select(Expense).where(Expense.description == "Bulbs for stairs"))
-    assert exp.is_settled is False and exp.paid_by_flat_id == flats["102"]
+    assert exp.is_settled is False and exp.paid_by_flat_id == flats["201"]
     assert exp.category == "Others"
-    assert exp.submitted_by.username == "sastry"
+    assert exp.submitted_by.username == "asrk.sastry"
     assert exp in ledger_svc.unsettled_expenses(seeded_db)
     assert ledger_svc.flat_balances(seeded_db, flat)["reimbursement_due"] == adv_before + 640
     assert "Submitted by owner" in admin_client.get(f"/expenses?period_id={exp.period_id}").text
 
     r = owner_client.post(
         "/owner/expenses",
-        data={"flat_id": flats["102"], "description": "Far future", "amount": "10", "expense_date": "2031-01-01"},
+        data={"flat_id": flats["201"], "description": "Far future", "amount": "10", "expense_date": "2031-01-01"},
         follow_redirects=False,
     )
     assert "owner_error" in r.headers["location"]
@@ -223,9 +223,9 @@ def test_legacy_corpus_item_pay_goes_to_general_corpus(owner_client, seeded_db):
     oct_id = _oct(seeded_db).id
     general_before = campaigns_svc.general_campaign(seeded_db)
     share_before = (
-        campaigns_svc.flat_share(seeded_db, general_before.id, flats["102"]).share_amount if general_before else 0
+        campaigns_svc.flat_share(seeded_db, general_before.id, flats["201"]).share_amount if general_before else 0
     )
-    cp = CorpusPayment(flat_id=flats["102"], period_id=oct_id, amount=5000, is_paid=False, description="Lift fund")
+    cp = CorpusPayment(flat_id=flats["201"], period_id=oct_id, amount=5000, is_paid=False, description="Lift fund")
     seeded_db.add(cp)
     seeded_db.commit()
     cp_id = cp.id
@@ -237,20 +237,20 @@ def test_legacy_corpus_item_pay_goes_to_general_corpus(owner_client, seeded_db):
 
     general = campaigns_svc.general_campaign(seeded_db)
     page = owner_client.get("/payments/corpus")
-    assert f'value="{flats["102"]}:{general.id}"' in page.text
+    assert f'value="{flats["201"]}:{general.id}"' in page.text
 
     r = owner_client.post(
         "/corpus/pay",
-        data={"target": f"{flats['102']}:{general.id}", "amount": "2000", "paid_on": "2026-10-09", "payment_mode": "UPI", "payment_note": "UTR123456789"},
+        data={"target": f"{flats['201']}:{general.id}", "amount": "2000", "paid_on": "2026-10-09", "payment_mode": "UPI", "payment_note": "UTR123456789"},
         follow_redirects=False,
     )
     assert r.status_code == 303 and "msg=" in r.headers["location"]
     seeded_db.expire_all()
-    share = campaigns_svc.flat_share(seeded_db, general.id, flats["102"])
+    share = campaigns_svc.flat_share(seeded_db, general.id, flats["201"])
     assert share.share_amount == share_before + 5000
-    assert campaigns_svc.remaining_for(seeded_db, general, flats["102"]) == share_before + 3000
+    assert campaigns_svc.remaining_for(seeded_db, general, flats["201"]) == share_before + 3000
 
-    reminders = reminders_svc.reminders_for_flats(seeded_db, [flats["102"]])
+    reminders = reminders_svc.reminders_for_flats(seeded_db, [flats["201"]])
     assert sum(i["amount"] for i in reminders["items"] if i["kind"] == "Corpus" and "General" in i["label"]) == share_before + 3000
 
     for p in seeded_db.scalars(select(CorpusPayment).where(CorpusPayment.campaign_id == general.id)).all():
@@ -272,10 +272,10 @@ def test_campaign_partial_payments_and_totals(admin_client, owner_client, seeded
     assert [r["share"] for r in summary["rows"]] == [20000] * 5
     assert summary["share_total"] == 100000 and summary["target_gap"] == 0
 
-    flat = seeded_db.get(Flat, flats["102"])
+    flat = seeded_db.get(Flat, flats["201"])
     owed_before = ledger_svc.flat_balances(seeded_db, flat)["owed_corpus"]
 
-    def pay(amount, flat_id=flats["102"]):
+    def pay(amount, flat_id=flats["201"]):
         return owner_client.post(
             f"/corpus/campaigns/{campaign.id}/pay",
             data={"flat_id": flat_id, "amount": str(amount), "paid_on": date.today().isoformat(), "payment_mode": "UPI", "payment_note": "UTR123456789"},
@@ -283,18 +283,18 @@ def test_campaign_partial_payments_and_totals(admin_client, owner_client, seeded
         )
 
     assert "msg=" in pay(10000).headers["location"]
-    assert campaigns_svc.remaining_for(seeded_db, campaign, flats["102"]) == 10000
+    assert campaigns_svc.remaining_for(seeded_db, campaign, flats["201"]) == 10000
     assert ledger_svc.flat_balances(seeded_db, flat)["owed_corpus"] == owed_before - 10000
 
     assert "error=" in pay(10001).headers["location"]
-    assert campaigns_svc.remaining_for(seeded_db, campaign, flats["102"]) == 10000
+    assert campaigns_svc.remaining_for(seeded_db, campaign, flats["201"]) == 10000
     assert pay(500, flat_id=flats["301"]).status_code == 403
 
     page = owner_client.get(f"/corpus/campaigns/{campaign.id}")
     assert page.status_code == 200 and "Painting 2026" in page.text
 
     assert "msg=" in pay(10000).headers["location"]
-    assert campaigns_svc.remaining_for(seeded_db, campaign, flats["102"]) == 0
+    assert campaigns_svc.remaining_for(seeded_db, campaign, flats["201"]) == 0
     assert "error=" in pay(1).headers["location"]
 
     seeded_db.expire_all()
@@ -307,14 +307,14 @@ def test_campaign_partial_payments_and_totals(admin_client, owner_client, seeded
 
     alerts = build_dashboard_alerts(seeded_db, _oct(seeded_db))
     corpus_alert = next(a for a in alerts if "Painting 2026" in a["title"])
-    assert "301" in corpus_alert["detail"] and "102" not in corpus_alert["detail"]
+    assert "301" in corpus_alert["detail"] and "201" not in corpus_alert["detail"]
 
     # Admin edits a share; custom shares at creation are honoured too.
     custom = _create_campaign(
         admin_client, seeded_db, "Borewell", 30000, due, **{f"share_{flats['101']}": "10000", f"share_{flats['401']}": "0"}
     )
     shares = {r["flat"].number: r["share"] for r in campaigns_svc.campaign_summary(seeded_db, custom)["rows"]}
-    assert shares["101"] == 10000 and shares["401"] == 0 and shares["102"] == 6000
+    assert shares["101"] == 10000 and shares["401"] == 0 and shares["201"] == 6000
 
     _close_campaign(admin_client, campaign)
     _close_campaign(admin_client, custom)
@@ -329,7 +329,7 @@ def test_reminders_highlight_overdue_and_due_soon(admin_client, owner_client, se
     overdue = _create_campaign(admin_client, seeded_db, "Overdue drive", 5000, date.today() - timedelta(days=2))
     soon = _create_campaign(admin_client, seeded_db, "Soon drive", 5000, date.today() + timedelta(days=3))
 
-    rem = reminders_svc.reminders_for_flats(seeded_db, [flats["102"]])
+    rem = reminders_svc.reminders_for_flats(seeded_db, [flats["201"]])
     statuses = {i["label"]: i["status"] for i in rem["items"] if i["kind"] == "Corpus"}
     assert any("Overdue drive" in k and v == "overdue" for k, v in statuses.items())
     assert any("Soon drive" in k and v == "due_soon" for k, v in statuses.items())
@@ -338,7 +338,7 @@ def test_reminders_highlight_overdue_and_due_soon(admin_client, owner_client, se
     dash = owner_client.get("/")
     assert dash.status_code == 200
     assert "Overdue drive" in dash.text and "reminder-overdue" in dash.text
-    flat_page = owner_client.get(f"/flats/{flats['102']}")
+    flat_page = owner_client.get(f"/flats/{flats['201']}")
     assert flat_page.status_code == 200 and "Soon drive" in flat_page.text
     assert owner_client.get(f"/flats/{flats['301']}", follow_redirects=False).status_code == 403
 
@@ -351,10 +351,10 @@ def test_reminders_highlight_overdue_and_due_soon(admin_client, owner_client, se
 
 def test_cancel_request_flow(admin_client, owner_client, seeded_db, set_password):
     flats = _flats(seeded_db)
-    flat = seeded_db.get(Flat, flats["102"])
+    flat = seeded_db.get(Flat, flats["201"])
     r = owner_client.post(
         "/owner/expenses",
-        data={"flat_id": flats["102"], "description": "Wrong entry", "category": "Common", "amount": "999", "expense_date": "2026-10-07"},
+        data={"flat_id": flats["201"], "description": "Wrong entry", "category": "Common", "amount": "999", "expense_date": "2026-10-07"},
         follow_redirects=False,
     )
     assert "owner_msg" in r.headers["location"]
@@ -407,7 +407,7 @@ def test_cancel_request_flow(admin_client, owner_client, seeded_db, set_password
     campaign = _create_campaign(admin_client, seeded_db, "Cancel drive", 5000, date.today() + timedelta(days=20))
     owner_client.post(
         f"/corpus/campaigns/{campaign.id}/pay",
-        data={"flat_id": flats["102"], "amount": "400", "paid_on": date.today().isoformat(), "payment_note": "UTR123456789"},
+        data={"flat_id": flats["201"], "amount": "400", "paid_on": date.today().isoformat(), "payment_note": "UTR123456789"},
     )
     seeded_db.expire_all()
     cp = seeded_db.scalar(select(CorpusPayment).where(CorpusPayment.campaign_id == campaign.id))
@@ -418,7 +418,7 @@ def test_cancel_request_flow(admin_client, owner_client, seeded_db, set_password
     admin_client.post(f"/admin/cancel-requests/{req2.id}/reject", data={"note": "Payment confirmed"})
     seeded_db.expire_all()
     assert seeded_db.get(CancelRequest, req2.id).status == "rejected"
-    assert campaigns_svc.remaining_for(seeded_db, campaign, flats["102"]) == 600
+    assert campaigns_svc.remaining_for(seeded_db, campaign, flats["201"]) == 600
     assert "rejected" in owner_client.get("/owner/submissions").text.lower()
 
     owner_client.post("/owner/cancel-requests", data={"record_type": "corpus_payment", "record_id": cp.id})
@@ -431,21 +431,21 @@ def test_cancel_request_flow(admin_client, owner_client, seeded_db, set_password
     admin_client.post(f"/admin/cancel-requests/{req3.id}/approve")
     seeded_db.expire_all()
     assert seeded_db.scalar(select(CorpusPayment).where(CorpusPayment.id == cp_id)) is None
-    assert campaigns_svc.remaining_for(seeded_db, campaign, flats["102"]) == 1000
+    assert campaigns_svc.remaining_for(seeded_db, campaign, flats["201"]) == 1000
     _close_campaign(admin_client, campaign)
 
 
 def test_cancel_maintenance_reverts_to_unpaid(admin_client, owner_client, seeded_db):
     flats = _flats(seeded_db)
     oct_p = _oct(seeded_db)
-    mp = _mp(seeded_db, oct_p.id, flats["102"])
+    mp = _mp(seeded_db, oct_p.id, flats["201"])
     if mp.is_paid:
         admin_client.post(f"/maintenance/{mp.id}/revert")
     owner_client.post(
         "/owner/maintenance",
-        data={"flat_id": flats["102"], "period_id": oct_p.id, "paid_on": "2026-10-12", "payment_mode": "UPI", "payment_note": "UTR123456789"},
+        data={"flat_id": flats["201"], "period_id": oct_p.id, "paid_on": "2026-10-12", "payment_mode": "UPI", "payment_note": "UTR123456789"},
     )
-    mp = _mp(seeded_db, oct_p.id, flats["102"])
+    mp = _mp(seeded_db, oct_p.id, flats["201"])
     assert mp.is_paid
     collected = ledger_svc.maintenance_collected(seeded_db, oct_p.id)
     owner_client.post("/owner/cancel-requests", data={"record_type": "maintenance_payment", "record_id": mp.id})
@@ -457,12 +457,12 @@ def test_cancel_maintenance_reverts_to_unpaid(admin_client, owner_client, seeded
     )
     assert ledger_svc.maintenance_collected(seeded_db, oct_p.id) == collected
     admin_client.post(f"/admin/cancel-requests/{req.id}/approve")
-    mp = _mp(seeded_db, oct_p.id, flats["102"])
+    mp = _mp(seeded_db, oct_p.id, flats["201"])
     assert mp.is_paid is False and mp.submitted_by_user_id is None
     assert ledger_svc.maintenance_collected(seeded_db, oct_p.id) == collected - mp.amount
     assert "approved" in owner_client.get("/owner/submissions").text.lower()
 
-    rem = reminders_svc.reminders_for_flats(seeded_db, [flats["102"]])
+    rem = reminders_svc.reminders_for_flats(seeded_db, [flats["201"]])
     assert any(i["kind"] == "Maintenance" for i in rem["items"])
     # Leave the shared test DB the way the seed had it.
     admin_client.post(f"/maintenance/{mp.id}/pay", data={"paid_on": "2026-10-10"})

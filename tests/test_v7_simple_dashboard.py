@@ -73,7 +73,7 @@ def _app_href(page: str, key: str) -> str:
     return html.unescape(re.search(rf'data-open-app="{key}" href="([^"]+)"', page).group(1))
 
 
-def _fresh_owner(db, set_password, username="sastry"):
+def _fresh_owner(db, set_password, username="asrk.sastry"):
     set_password(db, username, OWNER_PASSWORD)
     return make_client(username, OWNER_PASSWORD)
 
@@ -103,11 +103,11 @@ def test_default_view_persists_per_user(seeded_db, owner_client, set_password):
     r = owner_client.post("/account/dashboard-view", data={"view": "simple", "make_default": "1"}, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/?view=simple"
     seeded_db.expire_all()
-    assert seeded_db.scalar(select(User).where(User.username == "sastry")).dashboard_view == "simple"
+    assert seeded_db.scalar(select(User).where(User.username == "asrk.sastry")).dashboard_view == "simple"
     assert seeded_db.scalar(select(User).where(User.username == "pavan.kumar")).dashboard_view is None
 
     # A new login (new session) on another device starts in the saved default.
-    again = make_client("sastry", OWNER_PASSWORD)
+    again = make_client("asrk.sastry", OWNER_PASSWORD)
     page = again.get("/")
     assert "Your dues to pay" in page.text and "max-width: 600px" not in page.text
     assert 'name="make_default" value="1" checked' in page.text
@@ -119,15 +119,15 @@ def test_default_view_persists_per_user(seeded_db, owner_client, set_password):
     # A one-off toggle does not change the saved default; unticking clears it.
     again.get("/?view=detailed")
     seeded_db.expire_all()
-    assert seeded_db.scalar(select(User).where(User.username == "sastry")).dashboard_view == "simple"
+    assert seeded_db.scalar(select(User).where(User.username == "asrk.sastry")).dashboard_view == "simple"
     again.post("/account/dashboard-view", data={"view": "detailed"}, follow_redirects=False)
     seeded_db.expire_all()
-    assert seeded_db.scalar(select(User).where(User.username == "sastry")).dashboard_view is None
+    assert seeded_db.scalar(select(User).where(User.username == "asrk.sastry")).dashboard_view is None
 
 
 def test_default_view_detailed_and_bad_value(seeded_db, owner_client):
     owner_client.post("/account/dashboard-view", data={"view": "detailed", "make_default": "1"})
-    assert make_client("sastry", OWNER_PASSWORD).get("/").text.count("Action board") >= 1
+    assert make_client("asrk.sastry", OWNER_PASSWORD).get("/").text.count("Action board") >= 1
     assert owner_client.post("/account/dashboard-view", data={"view": "weird"}).status_code == 400
 
 
@@ -146,19 +146,19 @@ def test_month_navigation_kept_in_simple_view(seeded_db, owner_client):
 
 
 def test_simple_view_shows_only_own_flats(seeded_db, admin_client, owner_client):
-    _unpay(seeded_db, "102")
+    _unpay(seeded_db, "201")
     _unpay(seeded_db, "301")
     goal = _goal(admin_client, seeded_db)
     project = _project(admin_client, seeded_db)
     page = owner_client.get("/?view=simple&more=1").text
-    assert "Flat 102" in page
+    assert "Flat 201" in page
     for other in ("101", "301", "401", "501"):
         assert f"Flat {other}" not in page
     for name in ("Venkata", "Pavan", "Manikyamba"):
         assert name not in page
     assert "Maintenance" in page and goal.name in page and project.name in page
     # Every pay link points at a due of this owner's flat only.
-    own = _flat_id(seeded_db, "102")
+    own = _flat_id(seeded_db, "201")
     for href in _hrefs(page):
         key = parse_qs(urlsplit(href).query)["pay"][0]
         if key.startswith("m-"):
@@ -178,7 +178,7 @@ def test_owner_cannot_open_pay_sheet_or_pay_for_other_flat(seeded_db, admin_clie
         "back": "/?view=simple"}, follow_redirects=False)
     assert r.status_code == 403
     assert owner_client.get(f"/upi/qr.svg?flat_id={other}&amount=100&note=x").status_code == 403
-    assert owner_client.get(f"/upi/qr.svg?flat_id={_flat_id(seeded_db, '102')}&amount=100&note=x").status_code == 200
+    assert owner_client.get(f"/upi/qr.svg?flat_id={_flat_id(seeded_db, '201')}&amount=100&note=x").status_code == 200
 
 
 def test_owner_without_flats_sees_message(seeded_db, set_password):
@@ -217,7 +217,7 @@ def test_more_link_when_many_dues(seeded_db, admin_client, set_password):
 
 
 def test_pay_maintenance_through_sheet(seeded_db, owner_client):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     page = owner_client.get(f"/?view=simple&period_id={mp.period_id}&more=1").text
     href = next(h for h in _hrefs(page) if f"pay=m-{mp.period_id}-{mp.flat_id}" in h)
     sheet = owner_client.get(href).text
@@ -240,7 +240,7 @@ def test_pay_maintenance_through_sheet(seeded_db, owner_client):
 
 def test_pay_corpus_part_through_sheet(seeded_db, admin_client, owner_client):
     goal = _goal(admin_client, seeded_db, "Lift part v7", 50000)
-    own = _flat_id(seeded_db, "102")
+    own = _flat_id(seeded_db, "201")
     key = f"c-{goal.id}-{own}"
     sheet = owner_client.get(f"/?view=simple&pay={key}").text
     assert 'action="/corpus/pay"' in sheet and f'value="{own}:{goal.id}"' in sheet and "part payment allowed" in sheet
@@ -261,7 +261,7 @@ def test_pay_corpus_part_through_sheet(seeded_db, admin_client, owner_client):
 
 def test_pay_project_part_through_sheet(seeded_db, admin_client, owner_client):
     project = _project(admin_client, seeded_db, "Roof pay v7", "10000")
-    own = _flat_id(seeded_db, "102")
+    own = _flat_id(seeded_db, "201")
     pp = seeded_db.scalar(select(ProjectPayment).where(ProjectPayment.project_id == project.id, ProjectPayment.flat_id == own))
     sheet = owner_client.get(f"/?view=simple&pay=p-{pp.id}").text
     assert 'action="/owner/projects/pay"' in sheet and f'name="share_id" value="{pp.id}"' in sheet
@@ -274,7 +274,7 @@ def test_pay_project_part_through_sheet(seeded_db, admin_client, owner_client):
 
 
 def test_back_address_is_restricted(seeded_db, owner_client):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     r = owner_client.post("/owner/maintenance", data={
         "flat_id": mp.flat_id, "period_id": mp.period_id, "paid_on": "2026-10-05",
         "back": "https://evil.example/"}, follow_redirects=False)
@@ -311,7 +311,7 @@ def test_upi_settings_defaults_and_override(monkeypatch):
 
 
 def test_sheet_has_pay_now_block_without_qr_for_the_due(seeded_db, owner_client):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     sheet = owner_client.get(f"/?view=simple&pay=m-{mp.period_id}-{mp.flat_id}").text
     assert _app_href(sheet, "phonepe") == "phonepe://"  # launch-only: PhonePe declines prefilled pay links
     assert 'id="upi-qr"' not in sheet and "/upi/qr.svg" not in sheet and "Show QR" not in sheet  # v7.3: no QR on the sheet
@@ -321,8 +321,8 @@ def test_sheet_has_pay_now_block_without_qr_for_the_due(seeded_db, owner_client)
 
 
 def test_qr_endpoint_returns_svg_of_same_link(seeded_db, owner_client):
-    own = _flat_id(seeded_db, "102")
-    r = owner_client.get(f"/upi/qr.svg?flat_id={own}&amount=2000&note=Flat%20102%20Maintenance")
+    own = _flat_id(seeded_db, "201")
+    r = owner_client.get(f"/upi/qr.svg?flat_id={own}&amount=2000&note=Flat%20201%20Maintenance")
     assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg+xml")
     assert r.text.lstrip().startswith("<?xml") and "<svg" in r.text and "<path" in r.text
     assert owner_client.get(f"/upi/qr.svg?flat_id={own}&amount=0&note=x").status_code == 400

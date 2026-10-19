@@ -59,7 +59,7 @@ def test_owner_advances_sums_across_flats_and_counts_only_counted(seeded_db, mar
     mark(f["101"], 200)
     mark(f["101"], 999, status="rejected")
     mark(f["401"], 888, deleted=True)
-    mark(f["102"], 777)  # someone else's flat
+    mark(f["201"], 777)  # someone else's flat
     a = _base(seeded_db, ids)
     assert a["paid_total"] - b["paid_total"] == 1500
     assert a["settled_total"] - b["settled_total"] == 1000
@@ -126,11 +126,11 @@ def test_admin_dashboard_has_no_owner_summary_and_tenant_is_unchanged(seeded_db,
 
 
 @pytest.mark.parametrize("utc, expected", [
-    (datetime(2026, 10, 19, 11, 7, tzinfo=timezone.utc), "Mon 19 Oct 2026, 4:37 PM IST"),
-    (datetime(2026, 10, 19, 18, 30, tzinfo=timezone.utc), "Tue 20 Oct 2026, 12:00 AM IST"),
-    (datetime(2026, 10, 19, 6, 30, tzinfo=timezone.utc), "Mon 19 Oct 2026, 12:00 PM IST"),
-    (datetime(2026, 12, 31, 20, 0, tzinfo=timezone.utc), "Fri 1 Jan 2027, 1:30 AM IST"),
-    (datetime(2026, 3, 1, 0, 5), "Sun 1 Mar 2026, 5:35 AM IST"),  # naive means UTC
+    (datetime(2026, 10, 19, 11, 7, tzinfo=timezone.utc), "Mon 19-10-2026, 4:37 PM IST"),
+    (datetime(2026, 10, 19, 18, 30, tzinfo=timezone.utc), "Tue 20-10-2026, 12:00 AM IST"),
+    (datetime(2026, 10, 19, 6, 30, tzinfo=timezone.utc), "Mon 19-10-2026, 12:00 PM IST"),
+    (datetime(2026, 12, 31, 20, 0, tzinfo=timezone.utc), "Fri 01-01-2027, 1:30 AM IST"),
+    (datetime(2026, 3, 1, 0, 5), "Sun 01-03-2026, 5:35 AM IST"),  # naive means UTC
 ])
 def test_format_ist(utc, expected):
     assert dates.format_ist(utc) == expected
@@ -144,7 +144,7 @@ def test_ist_now_is_a_fixed_plus_0530_offset():
 def test_clock_under_logged_in_line_for_every_role(seeded_db, admin_client, owner_client, tnt_flat101):
     import re
     pat = re.compile(r'Logged in as <strong>[^<]+</strong> \((admin|owner|tenant)\)<div class="session-time" id="ist-clock"[^>]*>'
-                     r'(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2} [A-Z][a-z]{2} \d{4}, \d{1,2}:\d\d (AM|PM) IST</div></div>')
+                     r'(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d\d-\d\d-\d{4}, \d{1,2}:\d\d (AM|PM) IST</div></div>')
     for client, url, role in ((admin_client, "/", "admin"), (owner_client, "/", "owner"), (tnt_flat101, "/payments/maintenance", "tenant")):
         page = client.get(url).text
         m = pat.search(page)

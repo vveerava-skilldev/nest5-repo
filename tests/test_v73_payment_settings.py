@@ -125,14 +125,14 @@ def test_only_admin_reaches_payment_settings_owner_and_tenant_get_403(tmp_path):
     code = r'''
 data = {"upi_vpa": "x.y@okaxis", "upi_mobile": "9876543210", "payee_name": "Someone Else", "reason": "attempt", "bank_balance": ""}
 res = {}
-for who, client in (("owner", login("sastry")), ("tenant", login("ten1"))):
+for who, client in (("owner", login("asrk.sastry")), ("tenant", login("ten1"))):
     res[who] = [client.get("/admin/payment-settings").status_code, client.get("/admin/payment-settings/history").status_code,
                 client.post("/admin/payment-settings/review", data=data).status_code,
                 client.post("/admin/payment-settings/confirm", data={**data, "confirm": "yes"}).status_code]
 out["res"] = res
 out["admin"] = [admin.get("/admin/payment-settings").status_code, admin.get("/admin/payment-settings/history").status_code]
 out["rows"] = db.scalar(select(func.count()).select_from(PaymentDetailChange))
-out["nav_owner"] = "payment-settings" in login("sastry").get("/").text
+out["nav_owner"] = "payment-settings" in login("asrk.sastry").get("/").text
 out["nav_admin"] = "payment-settings" in admin.get("/").text
 out["live"] = pay.get_details(db)["vpa"]
 '''
@@ -145,8 +145,8 @@ out["live"] = pay.get_details(db)["vpa"]
 def test_pay_sheet_is_plain_text_and_follows_new_values_only_for_new_sheets(tmp_path):
     code = r'''
 import re
-owner = login("sastry")
-sast = db.scalar(select(User).where(User.username == "sastry"))
+owner = login("asrk.sastry")
+sast = db.scalar(select(User).where(User.username == "asrk.sastry"))
 flat = sast.flats[0]
 period = db.scalar(select(LedgerPeriod).where(LedgerPeriod.year == 2026, LedgerPeriod.month == 10))
 mp = db.scalar(select(MaintenancePayment).where(MaintenancePayment.period_id == period.id, MaintenancePayment.flat_id == flat.id))
@@ -181,8 +181,8 @@ def test_settings_change_never_touches_recorded_payments_exports_statements_or_h
 import io, json as js, re, zipfile
 import openpyxl
 from app.services import activity as activity_svc
-owner = login("sastry")
-sast = db.scalar(select(User).where(User.username == "sastry"))
+owner = login("asrk.sastry")
+sast = db.scalar(select(User).where(User.username == "asrk.sastry"))
 oflat = sast.flats[0]
 oct_ = db.scalar(select(LedgerPeriod).where(LedgerPeriod.year == 2026, LedgerPeriod.month == 10))
 def mrow(number):
@@ -373,8 +373,8 @@ out["after_change_stamped_new"] = db.scalar(select(func.count()).select_from(Mai
 def test_exports_and_pdf_statement_show_the_payee(tmp_path):
     code = r'''
 import io, zipfile
-owner = login("sastry")
-sast = db.scalar(select(User).where(User.username == "sastry"))
+owner = login("asrk.sastry")
+sast = db.scalar(select(User).where(User.username == "asrk.sastry"))
 flat = sast.flats[0]
 oct_ = db.scalar(select(LedgerPeriod).where(LedgerPeriod.year == 2026, LedgerPeriod.month == 10))
 mp = db.scalar(select(MaintenancePayment).where(MaintenancePayment.period_id == oct_.id, MaintenancePayment.flat_id == flat.id))

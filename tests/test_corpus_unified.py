@@ -66,7 +66,7 @@ def test_partial_corpus_payment_shows_everywhere_counted_once(admin_client, seed
 
     page = owner.get("/payments/corpus")
     assert f'value="{flats["101"]}:{campaign.id}"' in page.text
-    assert f'value="{flats["102"]}:{campaign.id}"' not in page.text
+    assert f'value="{flats["201"]}:{campaign.id}"' not in page.text
     assert "remaining ₹10000" in page.text
 
     r = owner.post(
@@ -102,7 +102,7 @@ def test_partial_corpus_payment_shows_everywhere_counted_once(admin_client, seed
 
     # Owners cannot pay for a flat that is not theirs; overpaying is refused.
     assert owner.post(
-        "/corpus/pay", data={"target": f"{flats['102']}:{campaign.id}", "amount": "100", "paid_on": date.today().isoformat()},
+        "/corpus/pay", data={"target": f"{flats['201']}:{campaign.id}", "amount": "100", "paid_on": date.today().isoformat()},
         follow_redirects=False,
     ).status_code == 403
     too_much = owner.post(
@@ -152,21 +152,21 @@ def test_owner_sees_only_own_rows_on_payment_tabs(admin_client, owner_client, se
     project = seeded_db.scalar(select(Project).where(Project.name == "Gate motor"))
     first_period = seeded_db.scalars(select(Expense.period_id).where(Expense.period_id.isnot(None))).first()
     seeded_db.add_all([
-        Expense(description="Bulb by 102", category="electrical", amount=150, expense_date=date(2026, 10, 2),
-                paid_by_flat_id=flats["102"], period_id=first_period, submitted_by_user_id=_user_id(seeded_db, "sastry")),
+        Expense(description="Bulb by 201", category="electrical", amount=150, expense_date=date(2026, 10, 2),
+                paid_by_flat_id=flats["201"], period_id=first_period, submitted_by_user_id=_user_id(seeded_db, "asrk.sastry")),
         Expense(description="Tap by 301", category="plumbing", amount=250, expense_date=date(2026, 10, 3),
                 paid_by_flat_id=flats["301"], period_id=first_period, submitted_by_user_id=_user_id(seeded_db, "admin")),
     ])
     seeded_db.commit()
     try:
         projects_tab = owner_client.get("/payments/projects").text
-        assert "Gate motor" in projects_tab and "<td>102</td>" in projects_tab
+        assert "Gate motor" in projects_tab and "<td>201</td>" in projects_tab
         for other in ("101", "301", "401", "501"):
             assert f"<td>{other}</td>" not in projects_tab
         assert "Mark paid" not in projects_tab
 
         admin_tab = admin_client.get("/payments/projects").text
-        assert all(f"<td>{n}</td>" in admin_tab for n in ("101", "102", "301", "401", "501"))
+        assert all(f"<td>{n}</td>" in admin_tab for n in ("101", "201", "301", "401", "501"))
         assert "Mark paid" in admin_tab
 
         pp = seeded_db.scalar(select(ProjectPayment).where(ProjectPayment.project_id == project.id, ProjectPayment.flat_id == flats["301"]))
@@ -175,14 +175,14 @@ def test_owner_sees_only_own_rows_on_payment_tabs(admin_client, owner_client, se
         assert owner_client.post(f"/projects/payments/{pp.id}/pay", data={"paid_on": "2026-10-05"}, follow_redirects=False).status_code == 403
 
         detail = owner_client.get(f"/projects/{project.id}").text
-        assert "<td>102</td>" in detail and "<td>301</td>" not in detail
+        assert "<td>201</td>" in detail and "<td>301</td>" not in detail
         assert "₹5000" in detail  # building collected (301 paid) is visible as a total
 
         exp_tab = owner_client.get("/payments/expenses").text
-        assert "Bulb by 102" in exp_tab and "Tap by 301" not in exp_tab
+        assert "Bulb by 201" in exp_tab and "Tap by 301" not in exp_tab
         assert 'action="/owner/expenses"' in exp_tab
         admin_exp = admin_client.get("/payments/expenses").text
-        assert "Bulb by 102" in admin_exp and "Tap by 301" in admin_exp
+        assert "Bulb by 201" in admin_exp and "Tap by 301" in admin_exp
 
         maint = owner_client.get("/payments/maintenance").text
         assert 'href="/payments/projects"' in maint and 'aria-current="page"' in maint
@@ -191,7 +191,7 @@ def test_owner_sees_only_own_rows_on_payment_tabs(admin_client, owner_client, se
         assert f'href="/flats/{flats["301"]}"' not in dash
     finally:
         seeded_db.expire_all()
-        for e in seeded_db.scalars(select(Expense).where(Expense.description.in_(["Bulb by 102", "Tap by 301"]))).all():
+        for e in seeded_db.scalars(select(Expense).where(Expense.description.in_(["Bulb by 201", "Tap by 301"]))).all():
             seeded_db.delete(e)
         project = seeded_db.get(Project, project.id)
         for pc in seeded_db.scalars(select(ProjectContribution).where(ProjectContribution.project_id == project.id)).all():
@@ -281,10 +281,10 @@ def test_general_corpus_migration_on_legacy_db(tmp_path):
     alembic("upgrade", "f3a8d1c6b2e9")
     con = sqlite3.connect(db_file)
     flat_cols = {r[1]: r for r in con.execute("PRAGMA table_info(flats)")}
-    for n in ("101", "102"):
+    for n in ("101", "201"):
         cols = ["number"] + [c for c, info in flat_cols.items() if info[3] and info[4] is None and c not in ("id", "number")]
         con.execute(f"INSERT INTO flats ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", [n] + [""] * (len(cols) - 1))
-    f101, f102 = (con.execute("SELECT id FROM flats WHERE number=?", (n,)).fetchone()[0] for n in ("101", "102"))
+    f101, f102 = (con.execute("SELECT id FROM flats WHERE number=?", (n,)).fetchone()[0] for n in ("101", "201"))
     con.executemany(
         "INSERT INTO corpus_payments (flat_id, amount, is_paid, paid_on, description) VALUES (?, ?, ?, ?, ?)",
         [(f101, 5000, 1, "2026-09-01", "Fund A"), (f101, 3000, 0, None, "Fund B"), (f102, 2000, 0, None, "Fund A")],

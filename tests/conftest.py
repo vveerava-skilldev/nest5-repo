@@ -65,5 +65,5 @@ def admin_client(seeded_db):
 
 @pytest.fixture
 def owner_client(seeded_db):
-    _set_password(seeded_db, "sastry", OWNER_PASSWORD)
-    return make_client("sastry", OWNER_PASSWORD)
+    _set_password(seeded_db, "asrk.sastry", OWNER_PASSWORD)
+    return make_client("asrk.sastry", OWNER_PASSWORD)

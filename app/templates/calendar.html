@@ -48,7 +48,7 @@
   <div class="cal-agenda" aria-label="Agenda for {{ month_title }}">
     {% for day in agenda %}
     <section class="cal-agenda-day{% if day.date == today %} today{% endif %}">
-      <h3>{{ day.date.strftime('%a') }} {{ day.date|format_date }}{% if day.date == today %} <span class="badge ok">Today</span>{% endif %}</h3>
+      <h3>{{ day.date|weekday_date }}{% if day.date == today %} <span class="badge ok">Today</span>{% endif %}</h3>
       <ul>
         {% for it in day['items'] %}
         <li><button type="button" class="cal-row t-{{ it.type }} s-{{ it.status }}{% if it.projected %} projected{% endif %}" data-id="{{ it.id }}" data-type="{{ it.type }}">

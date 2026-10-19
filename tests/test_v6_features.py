@@ -72,7 +72,7 @@ def test_owner_pays_project_share_in_parts(seeded_db, admin_client, owner_client
     flats = _flats(seeded_db)
     project = _create_project(admin_client, seeded_db, "Water softener v6", due=(date.today() - timedelta(days=3)).isoformat())
     try:
-        pp = _share(seeded_db, project, flats["102"])
+        pp = _share(seeded_db, project, flats["201"])
         tab = owner_client.get("/payments/projects").text
         assert "Pay a project share" in tab and f'value="{pp.id}"' in tab
         other = _share(seeded_db, project, flats["301"])
@@ -81,17 +81,17 @@ def test_owner_pays_project_share_in_parts(seeded_db, admin_client, owner_client
 
         r = _pay(owner_client, pp.id, 500)
         assert "owner_msg" in r.headers["location"]
-        pp = _share(seeded_db, project, flats["102"])
+        pp = _share(seeded_db, project, flats["201"])
         assert (pp.paid, pp.remaining, pp.status, pp.is_paid) == (500, 1500, "part", False)
-        flat = seeded_db.get(Flat, flats["102"])
+        flat = seeded_db.get(Flat, flats["201"])
         assert ledger_svc.flat_balances(seeded_db, flat)["owed_projects"] == 1500
-        items = reminders_svc.reminders_for_flats(seeded_db, [flats["102"]])["items"]
+        items = reminders_svc.reminders_for_flats(seeded_db, [flats["201"]])["items"]
         proj_item = next(i for i in items if i["kind"] == "Project" and "Water softener v6" in i["label"])
         assert proj_item["amount"] == 1500 and proj_item["status"] == "overdue"
         assert "Part paid" in owner_client.get("/payments/projects").text
         assert "₹500" in admin_client.get("/projects").text
         admin_tab = admin_client.get("/payments/projects").text
-        assert "Submitted by owner" in admin_tab and "sastry" in admin_tab
+        assert "Submitted by owner" in admin_tab and "asrk.sastry" in admin_tab
         assert "Part paid" in admin_client.get("/").text
 
         r = _pay(owner_client, pp.id, 2000)
@@ -100,7 +100,7 @@ def test_owner_pays_project_share_in_parts(seeded_db, admin_client, owner_client
 
         r = _pay(owner_client, pp.id, 1500, back=f"/projects/{project.id}")
         assert r.headers["location"].startswith(f"/projects/{project.id}?owner_msg")
-        pp = _share(seeded_db, project, flats["102"])
+        pp = _share(seeded_db, project, flats["201"])
         assert pp.status == "paid" and pp.is_paid and pp.remaining == 0
         r = _pay(owner_client, pp.id, 1)
         assert "already+fully+paid" in r.headers["location"]
@@ -118,14 +118,14 @@ def test_owner_pays_project_share_in_parts(seeded_db, admin_client, owner_client
         assert "Water softener v6" in req.summary
         assert "Project payment" in owner_client.get("/owner/submissions").text
         admin_client.post(f"/admin/cancel-requests/{req.id}/approve", data={"note": "ok"})
-        pp = _share(seeded_db, project, flats["102"])
+        pp = _share(seeded_db, project, flats["201"])
         assert (pp.paid, pp.status) == (500, "part")
 
         admin_client.post(f"/projects/payments/{pp.id}/pay", data={"paid_on": "2026-10-06"})
-        pp = _share(seeded_db, project, flats["102"])
+        pp = _share(seeded_db, project, flats["201"])
         assert pp.status == "paid" and len(pp.contributions) == 2
         admin_client.post(f"/projects/payments/{pp.id}/revert")
-        pp = _share(seeded_db, project, flats["102"])
+        pp = _share(seeded_db, project, flats["201"])
         assert (pp.paid, pp.status, pp.paid_on) == (0, "pending", None) and not pp.contributions
     finally:
         _drop_project(seeded_db, project.id)
@@ -136,13 +136,13 @@ def test_project_payment_in_pdf_and_insights(seeded_db, admin_client, owner_clie
     flats = _flats(seeded_db)
     project = _create_project(admin_client, seeded_db, "Pdf project v6")
     try:
-        pp = _share(seeded_db, project, flats["102"])
+        pp = _share(seeded_db, project, flats["201"])
         _pay(owner_client, pp.id, 700)
-        r = owner_client.get(f"/flats/{flats['102']}/statement.pdf?period_id=")
+        r = owner_client.get(f"/flats/{flats['201']}/statement.pdf?period_id=")
         assert r.status_code == 200 and r.content.startswith(b"%PDF")
         from app.services import insights as insights_svc
 
-        data = insights_svc.flat_insights(seeded_db, [flats["102"]])
+        data = insights_svc.flat_insights(seeded_db, [flats["201"]])
         assert data is not None
     finally:
         _drop_project(seeded_db, project.id)
@@ -160,7 +160,7 @@ def test_admin_manages_expense_categories(seeded_db, admin_client, owner_client)
     assert owner_client.post("/admin/expense-categories", data={"name": "x"}).status_code == 403
 
     exp = Expense(description="Old salary v6", category="Watchman Salary", amount=10, expense_date=date(2026, 10, 2),
-                  is_settled=False, paid_by_flat_id=flats["102"])
+                  is_settled=False, paid_by_flat_id=flats["201"])
     seeded_db.add(exp)
     seeded_db.commit()
     try:
@@ -174,7 +174,7 @@ def test_admin_manages_expense_categories(seeded_db, admin_client, owner_client)
         assert '<option value="Lift AMC">' in admin_client.get("/expenses").text
         owner_form = owner_client.get("/payments/expenses").text
         assert '<option value="Lift AMC">' not in owner_form and '<option value="Common">' in owner_form
-        owner_client.post("/owner/expenses", data={"flat_id": flats["102"], "description": "Sneaky v6",
+        owner_client.post("/owner/expenses", data={"flat_id": flats["201"], "description": "Sneaky v6",
                                                    "category": "Lift AMC", "amount": "5", "expense_date": "2026-10-03"})
         seeded_db.expire_all()
         assert seeded_db.scalar(select(Expense).where(Expense.description == "Sneaky v6")).category == "Others"
@@ -232,11 +232,11 @@ def test_admin_edits_and_deletes_project(seeded_db, admin_client, owner_client):
         assert (project.name, project.share_per_flat, project.due_date) == ("Edited v6", 3000, date(2026, 12, 31))
         assert {pp.amount for pp in project.payments} == {3000}
 
-        pp = _share(seeded_db, project, flats["102"])
+        pp = _share(seeded_db, project, flats["201"])
         _pay(owner_client, pp.id, 2500)
         r = admin_client.post(f"/projects/{project.id}/edit", data={"name": "Edited v6", "total_cost": "10000"},
                               follow_redirects=False)
-        assert "error=" in r.headers["location"] and "102" in r.headers["location"]
+        assert "error=" in r.headers["location"] and "201" in r.headers["location"]
 
         detail = admin_client.get(f"/projects/{project.id}").text
         assert "Delete is blocked" in detail
@@ -266,7 +266,7 @@ def test_admin_deletes_corpus_goal_with_explicit_confirm(seeded_db, admin_client
     goal = seeded_db.scalar(select(CorpusCampaign).where(CorpusCampaign.name == "Delete goal v6"))
     goal_id = goal.id
     try:
-        admin_client.post(f"/corpus/campaigns/{goal_id}/pay", data={"flat_id": flats["102"], "amount": "100",
+        admin_client.post(f"/corpus/campaigns/{goal_id}/pay", data={"flat_id": flats["201"], "amount": "100",
                                                                     "paid_on": "2026-10-05"})
         seeded_db.expire_all()
         pay = seeded_db.scalar(select(CorpusPayment).where(CorpusPayment.campaign_id == goal_id))
@@ -310,7 +310,7 @@ def _add_advance(db, flat_id, desc, amount, day=2):
 def test_dashboard_balances_and_settlement_card(seeded_db, admin_client, owner_client):
     flats = _flats(seeded_db)
     held = ledger_svc.compute_fund_balance(seeded_db)
-    small = _add_advance(seeded_db, flats["102"], "Small bulb v6", 300, day=1)
+    small = _add_advance(seeded_db, flats["201"], "Small bulb v6", 300, day=1)
     big = _add_advance(seeded_db, flats["301"], "Big pump v6", held + 5000, day=3)
     try:
         bal = balances_svc.overview(seeded_db)
@@ -321,10 +321,14 @@ def test_dashboard_balances_and_settlement_card(seeded_db, admin_client, owner_c
         for label in ("Account Balance (money held)", "Unsettled owner expenses", "Effective balance after settling",
                       "Available to settle now"):
             assert label in page
-        assert f"₹{bal['effective']}" in page and "would take the Account Balance to" in page
-        assert "Small bulb v6" in page and "Big pump v6" in page and "Needs ₹" in page
-        assert f'action="/settlements/{small.id}/settle"' in page
-        assert f'action="/settlements/{big.id}/settle"' not in page
+        assert f"₹{bal['effective']}" in page
+        # the dashboard no longer repeats a Settlement table: settling lives on the Actions list and the Settlements page
+        assert 'class="card settlement-card"' not in page and "would take the Account Balance to" not in page
+        assert "Unsettled owner expenses to settle" in page and 'href="/settlements"' in page
+        sett = admin_client.get("/settlements").text
+        assert "Small bulb v6" in sett and "Big pump v6" in sett and "Blocked" in sett
+        assert f'action="/settlements/{small.id}/settle"' in sett
+        assert f'action="/settlements/{big.id}/settle"' not in sett
 
         r = admin_client.post(f"/settlements/{small.id}/settle", data={"settled_on": date.today().isoformat(), "back": "/"},
                               follow_redirects=False)
@@ -350,9 +354,9 @@ def test_balance_states(seeded_db):
     extra = []
     try:
         if base["state"] == "nothing":
-            extra.append(_add_advance(seeded_db, flats["102"], "Fits v6", 100))
+            extra.append(_add_advance(seeded_db, flats["201"], "Fits v6", 100))
             assert balances_svc.overview(seeded_db)["state"] == "all"
-        extra.append(_add_advance(seeded_db, flats["102"], "Too big v6", held + 1, day=1))
+        extra.append(_add_advance(seeded_db, flats["201"], "Too big v6", held + 1, day=1))
         state = balances_svc.overview(seeded_db)["state"]
         assert state in ("none", "some")
     finally:
@@ -363,17 +367,17 @@ def test_balance_states(seeded_db):
 
 def test_owner_sees_own_unsettled_expenses(seeded_db, admin_client, owner_client):
     flats = _flats(seeded_db)
-    mine = _add_advance(seeded_db, flats["102"], "Mine v6", 450)
+    mine = _add_advance(seeded_db, flats["201"], "Mine v6", 450)
     theirs = _add_advance(seeded_db, flats["301"], "Theirs v6", 999)
     try:
-        expected = balances_svc.owner_advances(seeded_db, [flats["102"]])["owed"]
-        for url in ("/", f"/flats/{flats['102']}"):
+        expected = balances_svc.owner_advances(seeded_db, [flats["201"]])["owed"]
+        for url in ("/", f"/flats/{flats['201']}"):
             page = owner_client.get(url).text
             assert "owed back to you" in page and f"₹{expected}" in page
             assert "Mine v6" in page and "Waiting to be settled" in page
             assert "Theirs v6" not in page
         admin_client.post(f"/settlements/{mine.id}/settle", data={"settled_on": date.today().isoformat()})
-        page = owner_client.get(f"/flats/{flats['102']}").text
+        page = owner_client.get(f"/flats/{flats['201']}").text
         assert "Mine v6" in page and "Settled" in page
     finally:
         seeded_db.expire_all()
@@ -391,10 +395,10 @@ def test_owner_sees_own_unsettled_expenses(seeded_db, admin_client, owner_client
 def test_actions_hub(seeded_db, admin_client, owner_client, set_password):
     flats = _flats(seeded_db)
     project = _create_project(admin_client, seeded_db, "Overdue v6", due=(date.today() - timedelta(days=10)).isoformat())
-    exp = _add_advance(seeded_db, flats["102"], "Hub advance v6", 120)
+    exp = _add_advance(seeded_db, flats["201"], "Hub advance v6", 120)
     set_password(seeded_db, "pavan.kumar", "temp-pass-123", must_change=True)
     try:
-        pp = _share(seeded_db, project, flats["102"])
+        pp = _share(seeded_db, project, flats["201"])
         _pay(owner_client, pp.id, 100)
         contrib = seeded_db.scalar(select(ProjectContribution).where(ProjectContribution.project_payment_id == pp.id))
         owner_client.post("/owner/cancel-requests", data={"record_type": "project_contribution", "record_id": contrib.id})
@@ -409,7 +413,7 @@ def test_actions_hub(seeded_db, admin_client, owner_client, set_password):
         assert 'href="/admin/cancel-requests"' in page and "Overdue v6" in page
         assert f'href="/projects/{project.id}"' in page and 'href="/settlements"' in page
         assert "Hub advance v6" in page and "pavan.kumar" in page and "temporary password" in page
-        assert "Project Overdue v6" in page and "by sastry" in page and f'href="/projects/{project.id}"' in page
+        assert "Project Overdue v6" in page and "by asrk.sastry" in page and f'href="/projects/{project.id}"' in page
 
         dash = admin_client.get("/").text
         assert 'href="/admin/actions"' in dash and "Open the full list" in dash

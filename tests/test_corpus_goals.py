@@ -52,18 +52,18 @@ def test_goal_with_category_and_line_items(admin_client, owner_client, seeded_db
 
         page = owner_client.get("/corpus").text
         assert "Lift modernisation" in page and "Door sensors" in page
-        assert f'value="{flats["102"]}:{goal.id}"' in page and f'value="{flats["101"]}:{goal.id}"' not in page
+        assert f'value="{flats["201"]}:{goal.id}"' in page and f'value="{flats["101"]}:{goal.id}"' not in page
         row = f'<a href="/corpus/goals/{goal.id}"><strong>Lift modernisation'
         assert row not in owner_client.get("/corpus?category=Painting").text
         assert row in owner_client.get("/corpus?category=Lift").text
 
         r = owner_client.post("/corpus/pay", data={
-            "target": f"{flats['102']}:{goal.id}", "line_item_id": str(sensors_id), "amount": "4000",
+            "target": f"{flats['201']}:{goal.id}", "line_item_id": str(sensors_id), "amount": "4000",
             "paid_on": date.today().isoformat(), "payment_mode": "UPI", "payment_note": "UTR123456789", "back": "/corpus",
         }, follow_redirects=False)
         assert r.headers["location"].startswith("/corpus?msg=") and "Door+sensors" in r.headers["location"]
         r = owner_client.post("/corpus/pay", data={
-            "target": f"{flats['102']}:{goal.id}", "amount": "1000", "paid_on": date.today().isoformat(), "payment_note": "UTR123456789",
+            "target": f"{flats['201']}:{goal.id}", "amount": "1000", "paid_on": date.today().isoformat(), "payment_note": "UTR123456789",
         }, follow_redirects=False)
         assert "msg=" in r.headers["location"]
 
@@ -72,7 +72,7 @@ def test_goal_with_category_and_line_items(admin_client, owner_client, seeded_db
         assert [(row["item"].title, row["paid"], row["progress_pct"]) for row in items["rows"]] == [
             ("Door sensors", 4000, 20), ("Cabin panels", 0, 0)]
         assert items["unassigned"] == 1000
-        assert campaigns_svc.remaining_for(seeded_db, goal, flats["102"]) == 10000 - 5000
+        assert campaigns_svc.remaining_for(seeded_db, goal, flats["201"]) == 10000 - 5000
 
         detail = owner_client.get(f"/corpus/goals/{goal.id}").text
         assert "Door sensors" in detail and "₹4000" in detail and "Line items" in detail
@@ -84,7 +84,7 @@ def test_goal_with_category_and_line_items(admin_client, owner_client, seeded_db
                                                      "line_items": "Primer"})
         other = seeded_db.scalar(select(CorpusCampaign).where(CorpusCampaign.name == "Painting 2027"))
         r = owner_client.post("/corpus/pay", data={
-            "target": f"{flats['102']}:{goal.id}", "line_item_id": str(other.line_items[0].id), "amount": "10",
+            "target": f"{flats['201']}:{goal.id}", "line_item_id": str(other.line_items[0].id), "amount": "10",
             "paid_on": date.today().isoformat()}, follow_redirects=False)
         assert "error=" in r.headers["location"]
 

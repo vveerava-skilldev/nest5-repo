@@ -5,6 +5,7 @@ from app.models import LedgerPeriod
 from app.services import corpus_campaigns as campaigns_svc
 from app.services import ledger as ledger_svc
 from app.services import schedule as schedule_svc
+from app.dates import format_date as fmt_date
 
 
 def build_dashboard_alerts(
@@ -109,7 +110,7 @@ def build_dashboard_alerts(
         status = owing[0]["status"]
         severity = {"overdue": "critical", "due_soon": "warning"}.get(status, "info")
         state = {"overdue": "overdue since", "due_soon": "due"}.get(status, "due")
-        when = f" ({state} {campaign.due_date:%d-%m-%Y})" if campaign.due_date else ""
+        when = f" ({state} {fmt_date(campaign.due_date)})" if campaign.due_date else ""
         shown = owing if flat_ids is None else [r for r in owing if r["flat"].id in flat_ids]
         per_flat = " · ".join(f"{r['flat'].number}: ₹{r['remaining']}" for r in shown)
         label = "Remaining per flat" if flat_ids is None else "Your flat"

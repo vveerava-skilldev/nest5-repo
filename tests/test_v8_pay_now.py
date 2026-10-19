@@ -60,7 +60,7 @@ def test_no_prefilled_app_link_builders_remain():
 
 
 def test_sheet_shows_payee_plainly_without_copy_or_qr_and_has_utr_field(seeded_db, owner_client):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     sheet = _sheet(owner_client, mp)
     assert f"₹{mp.amount}" in sheet
     assert settings.upi_vpa == "9940255076@ybl"
@@ -93,7 +93,7 @@ def test_admin_page_is_not_in_owner_mode(seeded_db, admin_client):
 
 
 def test_list_row_is_a_pay_now_button_not_a_deep_link(seeded_db, owner_client):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     rows = owner_client.get(f"/?view=simple&period_id={mp.period_id}&more=1").text
     buttons = re.findall(r'class="sv-upi" href="([^"]+)"[^>]*>Pay now<', rows)
     assert buttons and all(html.unescape(b).startswith("/?view=simple") and "&pay=" in html.unescape(b) for b in buttons)
@@ -105,7 +105,7 @@ def test_list_row_is_a_pay_now_button_not_a_deep_link(seeded_db, owner_client):
 
 
 def test_upi_without_utr_is_refused_and_nothing_is_paid(seeded_db, owner_client):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     for bad in ("", "  ", "123", "12 34 56 78 90", "x" * 31):
         r = _submit(owner_client, mp, payment_note=bad)
         assert r.status_code == 303 and "owner_error=" in r.headers["location"], bad
@@ -120,14 +120,14 @@ def test_upi_without_utr_is_refused_and_nothing_is_paid(seeded_db, owner_client)
 
 
 def test_missing_mode_defaults_to_upi_and_needs_utr(seeded_db, owner_client):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     r = owner_client.post("/owner/maintenance", data={
         "flat_id": mp.flat_id, "period_id": mp.period_id, "paid_on": "2026-10-05"}, follow_redirects=False)
     assert "owner_error=" in r.headers["location"]
 
 
 def test_utr_is_stored_upper_case(seeded_db, owner_client):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     _submit(owner_client, mp, payment_note="abcd1234efgh")
     seeded_db.expire_all()
     assert seeded_db.get(MaintenancePayment, mp.id).payment_note == "ABCD1234EFGH"
@@ -135,7 +135,7 @@ def test_utr_is_stored_upper_case(seeded_db, owner_client):
 
 @pytest.mark.parametrize("mode", ["Cash", "Bank transfer", "Cheque", "Other"])
 def test_other_modes_need_no_utr(seeded_db, owner_client, mode):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     r = _submit(owner_client, mp, payment_mode=mode, payment_note="")
     assert "owner_msg=" in r.headers["location"], r.headers["location"]
     seeded_db.expire_all()
@@ -146,7 +146,7 @@ def test_other_modes_need_no_utr(seeded_db, owner_client, mode):
 def test_utr_required_on_corpus_and_project_endpoints_too(seeded_db, admin_client, owner_client):
     from app.models import CorpusPayment, ProjectPayment
 
-    own = _flat_id(seeded_db, "102")
+    own = _flat_id(seeded_db, "201")
     goal = _goal(admin_client, seeded_db, "Pay now goal", 50000)
     r = owner_client.post("/corpus/pay", data={"target": f"{own}:{goal.id}", "amount": "1000", "paid_on": "2026-10-06",
                                                "payment_mode": "UPI", "back": "/?view=simple"}, follow_redirects=False)
@@ -172,7 +172,7 @@ def test_utr_required_on_corpus_and_project_endpoints_too(seeded_db, admin_clien
 
 
 def test_admin_entries_stay_as_free_as_before(seeded_db, admin_client):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     r = admin_client.post("/owner/maintenance", data={
         "flat_id": mp.flat_id, "period_id": mp.period_id, "paid_on": "2026-10-05", "payment_mode": "UPI"},
         follow_redirects=False)
@@ -206,7 +206,7 @@ def test_sheet_requires_login(seeded_db):
 
 
 def test_admin_sees_utr_in_payments_view_and_cancel_queue(seeded_db, admin_client, owner_client):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     _submit(owner_client, mp)
     page = admin_client.get(f"/payments/maintenance?period_id={mp.period_id}").text
     assert UTR in page and "Submitted by owner" in page
@@ -220,7 +220,7 @@ def test_admin_sees_utr_in_payments_view_and_cancel_queue(seeded_db, admin_clien
 
 
 def test_owner_building_view_does_not_leak_other_flats_utr(seeded_db, owner_client, set_password):
-    mp = _unpay(seeded_db, "102")
+    mp = _unpay(seeded_db, "201")
     _submit(owner_client, mp, payment_note="SECRETUTR12345")
     other = make_client_for(seeded_db, set_password, "pavan.kumar")
     for url in ("/payments/building", "/payments/maintenance", "/corpus", "/owner/submissions"):

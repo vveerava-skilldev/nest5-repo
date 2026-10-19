@@ -8,7 +8,7 @@
 {% if preview %}
 <div class="card" style="border:2px solid var(--bad)">
   <h3 style="margin-top:0">Confirm restore</h3>
-  <p>File <strong>{{ preview.filename }}</strong>, exported {{ preview.exported_at or '—' }} (schema {{ preview.schema_version or '—' }}; this database: {{ preview.current_schema or '—' }}).</p>
+  <p>File <strong>{{ preview.filename }}</strong>, exported {{ (preview.exported_at or '—')|display_dates }} (schema {{ preview.schema_version or '—' }}; this database: {{ preview.current_schema or '—' }}).</p>
   <p><strong>This replaces the current data</strong> in every table included in the dump. Tables not in the dump are left as they are. A backup of the current database is taken automatically first.</p>
   <table>
     <thead><tr><th>Table</th><th>Rows now</th><th>Rows after restore</th></tr></thead>

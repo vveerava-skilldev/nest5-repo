@@ -26,7 +26,7 @@ def _set_building_view(db, on):
 
 def test_owner_menu_order(owner_client):
     menu = _menu(owner_client.get("/").text)
-    assert menu[:7] == ["Dashboard", "My flat 102", "Payments", "Complaints", "Asset schedule", "Calendar",
+    assert menu[:7] == ["Dashboard", "My flat 201", "Payments", "Complaints", "Asset schedule", "Calendar",
                         "My submissions"]
     assert "Expenses" not in menu and "Projects" not in menu and "Corpus" not in menu
 
@@ -53,7 +53,7 @@ def test_owner_payment_tabs(owner_client, admin_client):
         assert ">Expenses</a>" in r.text and "Owner expenses" not in r.text
     assert "Owner expenses" in admin_client.get("/payments/expenses").text
     maint = owner_client.get("/payments/maintenance").text
-    assert "<td>102</td>" in maint or ">102<" in maint
+    assert "<td>201</td>" in maint or ">201<" in maint
     assert ">101<" not in maint and ">301<" not in maint
 
 
@@ -62,7 +62,7 @@ def test_building_view_toggle(seeded_db, owner_client, admin_client):
         assert "View payments →" in owner_client.get("/payments/maintenance").text
         page = owner_client.get("/payments/building")
         assert page.status_code == 200
-        for number in ("101", "102", "301", "401", "501"):
+        for number in ("101", "201", "301", "401", "501"):
             assert f"<td>{number}</td>" in page.text
         assert 'action="/admin/settings/owner-building-view"' not in page.text
         assert 'action="/admin/settings/owner-building-view"' in admin_client.get("/payments/building").text
@@ -87,34 +87,34 @@ def test_building_view_toggle(seeded_db, owner_client, admin_client):
 
 def test_insights_data_stays_but_page_has_no_charts(seeded_db, owner_client):
     flats = _flats(seeded_db)
-    data = insights_svc.flat_insights(seeded_db, [flats["102"]])
+    data = insights_svc.flat_insights(seeded_db, [flats["201"]])
     paid = sum(mp.amount for mp in seeded_db.scalars(
-        select(MaintenancePayment).where(MaintenancePayment.flat_id == flats["102"],
+        select(MaintenancePayment).where(MaintenancePayment.flat_id == flats["201"],
                                          MaintenancePayment.is_paid.is_(True))).all()
         if mp.paid_on and (date.today().year * 12 + date.today().month) - (mp.paid_on.year * 12 + mp.paid_on.month) < 12)
     assert sum(data["trend"]["maintenance"]) == paid
     assert len(data["status"]["labels"]) == len(data["status"]["paid"]) == len(data["status"]["pending"])
 
-    page = owner_client.get(f"/flats/{flats['102']}").text
+    page = owner_client.get(f"/flats/{flats['201']}").text
     # v9.3: the charts are switched off for every user for now (the data service stays).
     assert "Insights" not in page and '<svg class="chart"' not in page
     assert "Payments made per month" not in page and "Maintenance paid vs pending" not in page
-    assert 'action="/flats/%d/statement.pdf"' % flats["102"] in page
+    assert 'action="/flats/%d/statement.pdf"' % flats["201"] in page
 
 
 def test_flat_statement_pdf(seeded_db, owner_client, admin_client, set_password):
     flats = _flats(seeded_db)
-    r = owner_client.get(f"/flats/{flats['102']}/statement.pdf")
+    r = owner_client.get(f"/flats/{flats['201']}/statement.pdf")
     assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
     assert r.content.startswith(b"%PDF") and "all-time" in r.headers["content-disposition"]
     period = seeded_db.scalars(select(LedgerPeriod).order_by(LedgerPeriod.year.desc(), LedgerPeriod.month.desc())).first()
-    r = owner_client.get(f"/flats/{flats['102']}/statement.pdf?period_id={period.id}")
+    r = owner_client.get(f"/flats/{flats['201']}/statement.pdf?period_id={period.id}")
     assert r.status_code == 200 and f"{period.year}-{period.month:02d}" in r.headers["content-disposition"]
     assert owner_client.get(f"/flats/{flats['101']}/statement.pdf").status_code == 403
     assert admin_client.get(f"/flats/{flats['101']}/statement.pdf").status_code == 200
 
     r = owner_client.get("/owner/statement.pdf")
-    assert r.status_code == 200 and "flats-102-" in r.headers["content-disposition"]
+    assert r.status_code == 200 and "flats-201-" in r.headers["content-disposition"]
     set_password(seeded_db, "manikyamba", OWNER_PASSWORD)
     multi = make_client("manikyamba", OWNER_PASSWORD)
     r = multi.get("/owner/statement.pdf")
@@ -125,5 +125,5 @@ def test_flat_statement_pdf(seeded_db, owner_client, admin_client, set_password)
 def test_owner_statement_page_only_own_flats(seeded_db, owner_client, admin_client):
     period = seeded_db.scalars(select(LedgerPeriod).order_by(LedgerPeriod.year.desc(), LedgerPeriod.month.desc())).first()
     mine = owner_client.get(f"/statements/{period.id}").text
-    assert "<td>102</td>" in mine and "<td>101</td>" not in mine and "<td>501</td>" not in mine
+    assert "<td>201</td>" in mine and "<td>101</td>" not in mine and "<td>501</td>" not in mine
     assert "<td>101</td>" in admin_client.get(f"/statements/{period.id}").text

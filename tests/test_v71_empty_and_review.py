@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def strip_history(page: str) -> str:
     """Recent activity is history and may name rejected / cancelled entries; every other area may not."""
-    return re.sub(r'<section class="card dashboard-activity.*?</section>', "", page, flags=re.S)
+    return re.sub(r'<details class="card dashboard-activity.*?</details>', "", page, flags=re.S)
 
 
 def run_scratch(tmp_path, code: str, *, prelude: str = "") -> str:
@@ -93,7 +93,7 @@ for url in ('/', '/corpus', '/projects', '/expenses', '/payments/corpus', '/paym
     assert r.status_code == 200, (url, r.status_code)
     pages[url] = r.text
 out['pages'] = pages
-owner = login('sastry')
+owner = login('asrk.sastry')
 out['owner_corpus'] = owner.get('/corpus').text
 out['owner_projects'] = owner.get('/projects').text
 """
@@ -109,7 +109,7 @@ def test_admin_sees_no_empty_cards_without_goals_projects_expenses(tmp_path):
     assert "Paid from Account Balance" not in dash and "Available to settle now" not in dash
     body = re.sub(r"<nav.*?</nav>", "", dash, flags=re.S)
     assert 'href="/corpus"' not in body and 'href="/projects"' not in body
-    assert "Maintenance</th>" in dash  # maintenance always exists
+    assert "<th>Maintenance" in dash  # maintenance always exists
 
     corpus = pages["/corpus"]
     assert "+ Add corpus goal" in corpus and 'action="/corpus/campaigns"' in corpus  # create form still there
@@ -174,7 +174,7 @@ def test_general_one_off_form_is_gone_but_general_goal_stays_internal(seeded_db,
     seeded_db.commit()
     gid = general.id
     try:
-        campaigns_svc.add_to_general_share(seeded_db, _flats(seeded_db)["102"], 500)
+        campaigns_svc.add_to_general_share(seeded_db, _flats(seeded_db)["201"], 500)
         seeded_db.commit()
         for url in ("/corpus", "/payments/corpus"):
             page = admin_client.get(url).text
@@ -197,9 +197,9 @@ def test_general_one_off_form_is_gone_but_general_goal_stays_internal(seeded_db,
 # ---- helpers for submissions ---------------------------------------------------------------
 
 
-def _sastry(db, set_password):
-    set_password(db, "sastry", OWNER_PASSWORD)
-    return make_client("sastry", OWNER_PASSWORD)
+def _siva(db, set_password):
+    set_password(db, "asrk.sastry", OWNER_PASSWORD)
+    return make_client("asrk.sastry", OWNER_PASSWORD)
 
 
 def _owner_project_payment(owner, db, project_name, flat_id, amount=100):
@@ -238,21 +238,21 @@ def _clear_reviews(db):
 
 
 def test_mark_reviewed_one_then_all_persists_and_keeps_history(seeded_db, admin_client, set_password):
-    owner = _sastry(seeded_db, set_password)
+    owner = _siva(seeded_db, set_password)
     flats = _flats(seeded_db)
     admin_client.post("/projects", data={"name": "Review project", "total_cost": "5000"})
     seeded_db.expire_all()
     project = seeded_db.scalar(select(Project).where(Project.name == "Review project"))
     pid = project.id
     try:
-        c1 = _owner_project_payment(owner, seeded_db, "Review project", flats["102"], 111)
-        c2 = _owner_project_payment(owner, seeded_db, "Review project", flats["102"], 222)
+        c1 = _owner_project_payment(owner, seeded_db, "Review project", flats["201"], 111)
+        c2 = _owner_project_payment(owner, seeded_db, "Review project", flats["201"], 222)
         pending = review_svc.pending(seeded_db)
         mine = [p for p in pending if p["record_id"] in (c1.id, c2.id) and p["kind"] == "project_contribution"]
         assert len(mine) == 2
         page = admin_client.get("/admin/actions").text
         assert "Mark all reviewed" in page and page.count("Mark reviewed") >= 2
-        assert "₹111" in page and "₹222" in page and "Project Review project" in page and "Flat 102" in page
+        assert "₹111" in page and "₹222" in page and "Project Review project" in page and "Flat 201" in page
         assert f'href="/projects/{pid}"' in page
         dash_total = actions_svc.build(seeded_db)["total"]
 
@@ -292,7 +292,7 @@ def test_mark_reviewed_one_then_all_persists_and_keeps_history(seeded_db, admin_
         assert {"review", "review_all"} <= actions
 
         # a new submission after "mark all" shows up again, un-reviewed
-        _owner_project_payment(owner, seeded_db, "Review project", flats["102"], 333)
+        _owner_project_payment(owner, seeded_db, "Review project", flats["201"], 333)
         assert "₹333" in admin_client.get("/admin/actions").text
     finally:
         _drop_project(seeded_db, pid)
@@ -310,14 +310,14 @@ def test_owner_cannot_mark_reviewed_or_reject(seeded_db, owner_client):
 
 def test_legacy_mark_all_timestamp_is_still_honoured(seeded_db, admin_client, set_password):
     """Submissions listed at upgrade time stay pending; only those before the old 'since' stamp are done."""
-    owner = _sastry(seeded_db, set_password)
+    owner = _siva(seeded_db, set_password)
     flats = _flats(seeded_db)
     admin_client.post("/projects", data={"name": "Legacy project", "total_cost": "5000"})
     seeded_db.expire_all()
     pid = seeded_db.scalar(select(Project).where(Project.name == "Legacy project")).id
     from app.services import app_settings as settings_svc
     try:
-        c = _owner_project_payment(owner, seeded_db, "Legacy project", flats["102"], 444)
+        c = _owner_project_payment(owner, seeded_db, "Legacy project", flats["201"], 444)
         assert any(p["record_id"] == c.id for p in review_svc.pending(seeded_db))  # nothing auto-cleared
         settings_svc.set_value(seeded_db, review_svc.LEGACY_REVIEWED_KEY,
                                (datetime.utcnow() + timedelta(minutes=1)).isoformat(), updated_by="admin")
@@ -334,17 +334,17 @@ def test_legacy_mark_all_timestamp_is_still_honoured(seeded_db, admin_client, se
 
 
 def test_actions_board_is_grouped_one_line_per_item_and_hides_empty_groups(seeded_db, admin_client, set_password):
-    owner = _sastry(seeded_db, set_password)
+    owner = _siva(seeded_db, set_password)
     flats = _flats(seeded_db)
     admin_client.post("/projects", data={"name": "Board project", "total_cost": "5000"})
     seeded_db.expire_all()
     pid = seeded_db.scalar(select(Project).where(Project.name == "Board project")).id
     try:
-        c = _owner_project_payment(owner, seeded_db, "Board project", flats["102"], 250)
+        c = _owner_project_payment(owner, seeded_db, "Board project", flats["201"], 250)
         page = admin_client.get("/admin/actions").text
         assert "Needs your review" in page and "New owner submissions to review" in page
         row = re.search(r'<li class="actions-row">(?:(?!</li>).)*₹250(?:(?!</li>).)*</li>', page, flags=re.S).group(0)
-        for needle in ("Project Board project", "Flat 102", "₹250", "by sastry", f'href="/projects/{pid}"',
+        for needle in ("Project Board project", "Flat 201", "₹250", "by asrk.sastry", f'href="/projects/{pid}"',
                        "Mark reviewed", "Reject"):
             assert needle in row, needle
         assert row.count("<li") == 1
@@ -375,15 +375,15 @@ def _reject(admin, kind, record_id, reason="", back="/admin/actions"):
 
 
 def test_reject_owner_maintenance_payment_restores_the_due(seeded_db, admin_client, set_password):
-    owner = _sastry(seeded_db, set_password)
+    owner = _siva(seeded_db, set_password)
     flats = _flats(seeded_db)
-    mp, saved = _free_maintenance_row(seeded_db, flats["102"])
+    mp, saved = _free_maintenance_row(seeded_db, flats["201"])
     mp_id, period_id = mp.id, mp.period_id
     try:
-        before = totals(seeded_db, [flats["102"], flats["101"]])
-        owner.post("/owner/maintenance", data={"flat_id": flats["102"], "period_id": period_id, "paid_on": "2026-10-06",
+        before = totals(seeded_db, [flats["201"], flats["101"]])
+        owner.post("/owner/maintenance", data={"flat_id": flats["201"], "period_id": period_id, "paid_on": "2026-10-06",
                                                "amount": "2345", "payment_mode": "UPI", "payment_note": "UTR987654321"})
-        during = totals(seeded_db, [flats["102"], flats["101"]])
+        during = totals(seeded_db, [flats["201"], flats["101"]])
         assert during != before and during["fund_balance"] == before["fund_balance"] + 2345
         assert "₹2345" in admin_client.get("/admin/actions").text
         assert "Reject" in admin_client.get(f"/payments/maintenance?period_id={period_id}").text
@@ -396,13 +396,13 @@ def test_reject_owner_maintenance_payment_restores_the_due(seeded_db, admin_clie
         assert not mp.is_paid and mp.paid_on is None and mp.submitted_by_user_id is None
         assert mp.amount == fee_svc.fee_for_period(seeded_db, mp.period)  # the month's fee is due again, not ₹2345
 
-        assert totals(seeded_db, [flats["102"], flats["101"]]) == before
+        assert totals(seeded_db, [flats["201"], flats["101"]]) == before
         _pages_without([admin_client, owner], "₹2345",
-                       extra=[f"/flats/{flats['102']}", f"/statements/{period_id}", "/?view=simple"])
-        due = [i for i in reminders_svc.reminders_for_flats(seeded_db, [flats["102"]])["items"] if i["kind"] == "Maintenance"]
+                       extra=[f"/flats/{flats['201']}", f"/statements/{period_id}", "/?view=simple"])
+        due = [i for i in reminders_svc.reminders_for_flats(seeded_db, [flats["201"]])["items"] if i["kind"] == "Maintenance"]
         assert any("October" in i["label"] for i in due)
         simple = owner.get("/?view=simple").text
-        total_due = reminders_svc.reminders_for_flats(seeded_db, [flats["102"]])["total"]
+        total_due = reminders_svc.reminders_for_flats(seeded_db, [flats["201"]])["total"]
         assert total_due > 0 and f"<span>You owe</span><strong>₹{total_due}</strong>" in simple
         assert "Your dues to pay" in simple and "sv-due-row" in simple
 
@@ -427,15 +427,15 @@ def test_reject_owner_maintenance_payment_restores_the_due(seeded_db, admin_clie
 
 
 def test_reject_owner_corpus_payment_updates_goal_progress(seeded_db, admin_client, set_password):
-    owner = _sastry(seeded_db, set_password)
+    owner = _siva(seeded_db, set_password)
     flats = _flats(seeded_db)
     admin_client.post("/corpus/campaigns", data={"name": "Reject drive", "target_amount": "50000"})
     seeded_db.expire_all()
     camp = seeded_db.scalar(select(CorpusCampaign).where(CorpusCampaign.name == "Reject drive"))
     cid = camp.id
     try:
-        before = totals(seeded_db, [flats["102"]])
-        owner.post("/corpus/pay", data={"target": f"{flats['102']}:{cid}", "amount": "1234", "paid_on": date.today().isoformat(),
+        before = totals(seeded_db, [flats["201"]])
+        owner.post("/corpus/pay", data={"target": f"{flats['201']}:{cid}", "amount": "1234", "paid_on": date.today().isoformat(),
                                         "payment_mode": "Cash"})
         seeded_db.expire_all()
         cp = seeded_db.scalar(select(CorpusPayment).where(CorpusPayment.campaign_id == cid))
@@ -448,13 +448,13 @@ def test_reject_owner_corpus_payment_updates_goal_progress(seeded_db, admin_clie
         assert seeded_db.get(CorpusPayment, cp_id) is None
         summary = campaigns_svc.campaign_summary(seeded_db, seeded_db.get(CorpusCampaign, cid))
         assert summary["paid_total"] == 0 and summary["progress_pct"] == 0
-        assert totals(seeded_db, [flats["102"]]) == before
-        _pages_without([admin_client, owner], "₹1234", extra=[f"/flats/{flats['102']}", f"/corpus/goals/{cid}", "/?view=simple"])
+        assert totals(seeded_db, [flats["201"]]) == before
+        _pages_without([admin_client, owner], "₹1234", extra=[f"/flats/{flats['201']}", f"/corpus/goals/{cid}", "/?view=simple"])
         assert "0%" in admin_client.get(f"/corpus/goals/{cid}").text
         mine = owner.get("/owner/submissions").text
         assert "Rejected" in mine and "Wrong flat" in mine
         # the share is due again for the owner
-        assert any("Reject drive" in i["label"] for i in reminders_svc.reminders_for_flats(seeded_db, [flats["102"]])["items"])
+        assert any("Reject drive" in i["label"] for i in reminders_svc.reminders_for_flats(seeded_db, [flats["201"]])["items"])
     finally:
         seeded_db.expire_all()
         for p in seeded_db.scalars(select(CorpusPayment).where(CorpusPayment.campaign_id == cid)).all():
@@ -468,14 +468,14 @@ def test_reject_owner_corpus_payment_updates_goal_progress(seeded_db, admin_clie
 
 
 def test_reject_owner_project_payment_updates_paid_percent(seeded_db, admin_client, set_password):
-    owner = _sastry(seeded_db, set_password)
+    owner = _siva(seeded_db, set_password)
     flats = _flats(seeded_db)
     admin_client.post("/projects", data={"name": "Reject project", "total_cost": "5000"})
     seeded_db.expire_all()
     pid = seeded_db.scalar(select(Project).where(Project.name == "Reject project")).id
     try:
-        before = totals(seeded_db, [flats["102"]])
-        contrib = _owner_project_payment(owner, seeded_db, "Reject project", flats["102"], 650)
+        before = totals(seeded_db, [flats["201"]])
+        contrib = _owner_project_payment(owner, seeded_db, "Reject project", flats["201"], 650)
         assert "13%" in admin_client.get("/projects").text
         assert "Reject" in admin_client.get("/payments/projects").text
         contrib_id = contrib.id
@@ -483,24 +483,24 @@ def test_reject_owner_project_payment_updates_paid_percent(seeded_db, admin_clie
         assert "msg=" in r.headers["location"]
         seeded_db.expire_all()
         assert seeded_db.get(ProjectContribution, contrib_id) is None
-        share = seeded_db.scalar(select(ProjectPayment).where(ProjectPayment.project_id == pid, ProjectPayment.flat_id == flats["102"]))
+        share = seeded_db.scalar(select(ProjectPayment).where(ProjectPayment.project_id == pid, ProjectPayment.flat_id == flats["201"]))
         assert share.paid == 0 and share.status == "pending" and share.remaining == share.amount
-        assert totals(seeded_db, [flats["102"]]) == before
+        assert totals(seeded_db, [flats["201"]]) == before
         projects_page = admin_client.get("/projects").text
         assert "0%" in projects_page and "13%" not in projects_page
-        _pages_without([admin_client, owner], "₹650", extra=[f"/flats/{flats['102']}", f"/projects/{pid}", "/?view=simple"])
+        _pages_without([admin_client, owner], "₹650", extra=[f"/flats/{flats['201']}", f"/projects/{pid}", "/?view=simple"])
         assert "Rejected" in owner.get("/owner/submissions").text and "Duplicate" in owner.get("/owner/submissions").text
-        assert any("Reject project" in i["label"] for i in reminders_svc.reminders_for_flats(seeded_db, [flats["102"]])["items"])
+        assert any("Reject project" in i["label"] for i in reminders_svc.reminders_for_flats(seeded_db, [flats["201"]])["items"])
     finally:
         _drop_project(seeded_db, pid)
         _clear_reviews(seeded_db)
 
 
 def test_reject_owner_expense_uses_the_same_endpoint_and_admin_entries_cannot_be_rejected(seeded_db, admin_client, set_password):
-    owner = _sastry(seeded_db, set_password)
+    owner = _siva(seeded_db, set_password)
     flats = _flats(seeded_db)
-    before = totals(seeded_db, [flats["102"]])
-    owner.post("/owner/expenses", data={"flat_id": flats["102"], "description": "Reject bulbs", "category": "Common",
+    before = totals(seeded_db, [flats["201"]])
+    owner.post("/owner/expenses", data={"flat_id": flats["201"], "description": "Reject bulbs", "category": "Common",
                                         "amount": "640", "expense_date": "2026-10-04"})
     seeded_db.expire_all()
     exp = seeded_db.scalar(select(Expense).where(Expense.description == "Reject bulbs"))
@@ -510,7 +510,7 @@ def test_reject_owner_expense_uses_the_same_endpoint_and_admin_entries_cannot_be
         assert "msg=" in r.headers["location"]
         seeded_db.expire_all()
         assert seeded_db.get(Expense, exp.id).status == "rejected"
-        assert totals(seeded_db, [flats["102"]]) == before
+        assert totals(seeded_db, [flats["201"]]) == before
         assert "Reject bulbs" not in admin_client.get("/admin/actions").text
         assert "Rejected" in owner.get("/owner/submissions").text
 
@@ -526,13 +526,13 @@ def test_reject_owner_expense_uses_the_same_endpoint_and_admin_entries_cannot_be
 
 
 def test_reject_closes_a_pending_cancel_request_without_double_listing(seeded_db, admin_client, set_password):
-    owner = _sastry(seeded_db, set_password)
+    owner = _siva(seeded_db, set_password)
     flats = _flats(seeded_db)
     admin_client.post("/projects", data={"name": "Cancel then reject", "total_cost": "5000"})
     seeded_db.expire_all()
     pid = seeded_db.scalar(select(Project).where(Project.name == "Cancel then reject")).id
     try:
-        contrib = _owner_project_payment(owner, seeded_db, "Cancel then reject", flats["102"], 500)
+        contrib = _owner_project_payment(owner, seeded_db, "Cancel then reject", flats["201"], 500)
         contrib_id = contrib.id
         owner.post("/owner/cancel-requests", data={"record_type": "project_contribution", "record_id": contrib_id})
         assert "Cancel requests waiting" in admin_client.get("/admin/actions").text
@@ -558,17 +558,17 @@ def test_exports_leave_out_cancelled_and_rejected_but_json_keeps_them(seeded_db,
 
     from openpyxl import load_workbook
 
-    owner = _sastry(seeded_db, set_password)
+    owner = _siva(seeded_db, set_password)
     flats = _flats(seeded_db)
     admin_client.post("/projects", data={"name": "Export project", "total_cost": "5000"})
     seeded_db.expire_all()
     pid = seeded_db.scalar(select(Project).where(Project.name == "Export project")).id
-    owner.post("/owner/expenses", data={"flat_id": flats["102"], "description": "Cancelled export bill", "category": "Common",
+    owner.post("/owner/expenses", data={"flat_id": flats["201"], "description": "Cancelled export bill", "category": "Common",
                                         "amount": "4321", "expense_date": "2026-10-04"})
     seeded_db.expire_all()
     exp = seeded_db.scalar(select(Expense).where(Expense.description == "Cancelled export bill"))
     try:
-        contrib = _owner_project_payment(owner, seeded_db, "Export project", flats["102"], 999)
+        contrib = _owner_project_payment(owner, seeded_db, "Export project", flats["201"], 999)
         _cancel(owner, admin_client, seeded_db, "expense", exp.id)
         _reject(admin_client, "project_contribution", contrib.id, "Bad ref")
         xlsx = load_workbook(io.BytesIO(admin_client.get("/admin/export/excel").content))
@@ -596,22 +596,22 @@ def test_exports_leave_out_cancelled_and_rejected_but_json_keeps_them(seeded_db,
 
 
 def test_cancel_approval_restores_simple_view_dues_and_progress(seeded_db, admin_client, set_password):
-    owner = _sastry(seeded_db, set_password)
+    owner = _siva(seeded_db, set_password)
     flats = _flats(seeded_db)
     admin_client.post("/projects", data={"name": "Cancel progress", "total_cost": "5000"})
     seeded_db.expire_all()
     pid = seeded_db.scalar(select(Project).where(Project.name == "Cancel progress")).id
     try:
-        before = totals(seeded_db, [flats["102"]])
-        contrib = _owner_project_payment(owner, seeded_db, "Cancel progress", flats["102"], 650)
+        before = totals(seeded_db, [flats["201"]])
+        contrib = _owner_project_payment(owner, seeded_db, "Cancel progress", flats["201"], 650)
         assert "13%" in admin_client.get("/projects").text
         _cancel(owner, admin_client, seeded_db, "project_contribution", contrib.id)
-        assert totals(seeded_db, [flats["102"]]) == before
+        assert totals(seeded_db, [flats["201"]]) == before
         page = admin_client.get("/projects").text
         assert "0%" in page and "13%" not in page
         simple = owner.get("/?view=simple").text
         assert "Cancel progress" in simple  # the full share is a due again
-        _pages_without([admin_client, owner], "₹650", extra=[f"/projects/{pid}", f"/flats/{flats['102']}"])
+        _pages_without([admin_client, owner], "₹650", extra=[f"/projects/{pid}", f"/flats/{flats['201']}"])
     finally:
         _drop_project(seeded_db, pid)
         _clear_reviews(seeded_db)

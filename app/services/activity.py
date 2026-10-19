@@ -289,6 +289,8 @@ def _sentence(entry: AuditLog, role: str, lk: Lookups) -> tuple[str, str | None,
             "role_change": "changed the role of user",
             "disable": "disabled user",
             "enable": "enabled user",
+            "delete": "deleted user",
+            "restore": "restored user",
             "password_reset": "reset the password of user",
         }.get(a)
         if a == "password_change":

@@ -221,7 +221,7 @@ def _edit(client, exp, **over):
 
 def test_owner_edits_own_expense(seeded_db, owner_client, cleanup):
     flats = _flats(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Wrong desc 104", 80, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Wrong desc 104", 80, cleanup)
     before = balances_svc.overview(seeded_db)["owed"]
     r = _edit(owner_client, exp, description="Right desc 101", amount="95")
     assert r.status_code == 303 and "owner_msg" in r.headers["location"]
@@ -237,7 +237,7 @@ def test_owner_edits_own_expense(seeded_db, owner_client, cleanup):
 
 def test_owner_edit_blocked_cases(seeded_db, admin_client, owner_client, cleanup, set_password):
     flats = _flats(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Edit guard", 70, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Edit guard", 70, cleanup)
     # a flat that is not theirs
     assert _edit(owner_client, exp, flat_id=flats["401"]).status_code == 403
     # someone else's expense
@@ -259,7 +259,7 @@ def test_owner_edit_blocked_cases(seeded_db, admin_client, owner_client, cleanup
 
 def test_owner_cannot_edit_after_settlement_or_admin_rows(seeded_db, owner_client, cleanup):
     flats = _flats(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Settled soon", 40, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Settled soon", 40, cleanup)
     from app.models import Settlement
     from datetime import date
 
@@ -278,7 +278,7 @@ def test_owner_cannot_edit_after_settlement_or_admin_rows(seeded_db, owner_clien
 
 def test_reject_from_cancel_queue_removes_expense_everywhere(seeded_db, admin_client, owner_client, cleanup):
     flats = _flats(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Wrong flat 104", 55, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Wrong flat 104", 55, cleanup)
     before = balances_svc.overview(seeded_db)["owed"]
     owner_client.post("/owner/cancel-requests", data={"record_type": "expense", "record_id": exp.id, "reason": "wrong flat"})
     seeded_db.expire_all()
@@ -296,7 +296,7 @@ def test_reject_from_cancel_queue_removes_expense_everywhere(seeded_db, admin_cl
 
 def test_keep_entry_keeps_expense(seeded_db, admin_client, owner_client, cleanup):
     flats = _flats(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Keep me", 33, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Keep me", 33, cleanup)
     owner_client.post("/owner/cancel-requests", data={"record_type": "expense", "record_id": exp.id, "reason": "x"})
     seeded_db.expire_all()
     req = seeded_db.scalar(select(CancelRequest).where(CancelRequest.record_type == "expense", CancelRequest.record_id == exp.id))
@@ -310,7 +310,7 @@ def test_keep_entry_keeps_expense(seeded_db, admin_client, owner_client, cleanup
 
 def test_legacy_rejected_cancel_row_can_reject_expense_now(seeded_db, admin_client, owner_client, cleanup):
     flats = _flats(seeded_db)
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Legacy reject", 22, cleanup)
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Legacy reject", 22, cleanup)
     owner_client.post("/owner/cancel-requests", data={"record_type": "expense", "record_id": exp.id, "reason": "x"})
     seeded_db.expire_all()
     req = seeded_db.scalar(select(CancelRequest).where(CancelRequest.record_type == "expense", CancelRequest.record_id == exp.id))
@@ -329,12 +329,12 @@ def test_legacy_rejected_cancel_row_can_reject_expense_now(seeded_db, admin_clie
 
 def test_simple_view_shows_owed_back_total(seeded_db, owner_client, cleanup):
     flats = _flats(seeded_db)
-    already = balances_svc.owner_advances(seeded_db, [flats["102"]])["owed"]
-    exp = _owner_submit(owner_client, seeded_db, flats["102"], "Owed to me", 123, cleanup)
+    already = balances_svc.owner_advances(seeded_db, [flats["201"]])["owed"]
+    exp = _owner_submit(owner_client, seeded_db, flats["201"], "Owed to me", 123, cleanup)
     page = owner_client.get("/?view=simple").text
     assert "Expenses you paid" in page and "Owed to me" in page
     assert "Unsettled" in page
-    total = balances_svc.owner_advances(seeded_db, [flats["102"]])["owed"]
+    total = balances_svc.owner_advances(seeded_db, [flats["201"]])["owed"]
     assert f"₹{total}" in page and total >= 123
     review_svc.reject(seeded_db, seeded_db.get(Expense, exp.id), admin_label="admin", reason="x")
     seeded_db.commit()
@@ -345,7 +345,7 @@ def test_simple_view_shows_owed_back_total(seeded_db, owner_client, cleanup):
 
 
 def test_due_hints(seeded_db, owner_client):
-    flat, period = _unpay(seeded_db, "102")
+    flat, period = _unpay(seeded_db, "201")
     assert reminders_svc.maintenance_due_date(period).isoformat() == "2026-10-05"
     assert reminders_svc.due_hint(reminders_svc.maintenance_due_date(period)) == "due 05-10-2026"
     simple = owner_client.get(f"/?view=simple&more=1&period_id={period.id}").text
@@ -389,7 +389,7 @@ def test_empty_cards_hidden_for_owner_with_no_data(seeded_db, admin_client, set_
 
 
 def test_no_insights_anywhere(seeded_db, admin_client, owner_client):
-    flat = seeded_db.scalar(select(Flat).where(Flat.number == "102"))
+    flat = seeded_db.scalar(select(Flat).where(Flat.number == "201"))
     for client in (admin_client, owner_client):
         page = client.get(f"/flats/{flat.id}").text
         assert "Insights" not in page and "insight" not in page.lower().replace("insights_", "")
