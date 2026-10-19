@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Audit log — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Change history</h2>
+<p style="color:var(--muted)">Latest {{ entries|length }} changes, newest first. Open <em>Details</em> for the raw before / after data. A friendlier feed is on <a href="/admin/activity">Activity</a>.</p>
+<div class="card">
+  {% if entries %}
+  <ul class="activity-list audit-list">
+  {% for e in entries %}
+    <li class="activity-item">
+      <span class="activity-badge {{ e.role }}">{{ e.badge }}</span>
+      <div class="activity-body">
+        <div class="activity-text">{{ e.sentence }}</div>
+        <div class="activity-meta">{{ e.when|format_datetime }} · {{ e.entity }} · {{ e.action }}</div>
+        {% set raw = raw_logs[e.id] %}
+        {% if raw.before_json or raw.after_json %}
+        <details class="audit-details">
+          <summary>Details</summary>
+          <div class="audit-raw"><strong>Before</strong><code>{{ raw.before_json or '—' }}</code></div>
+          <div class="audit-raw"><strong>After</strong><code>{{ raw.after_json or '—' }}</code></div>
+        </details>
+        {% endif %}
+      </div>
+    </li>
+  {% endfor %}
+  </ul>
+  {% else %}
+  <p class="activity-empty">Nothing has been logged yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

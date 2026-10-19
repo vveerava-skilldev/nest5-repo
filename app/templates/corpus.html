@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_paid_to.html" import paid_to %}
+{% from "_owner_marks.html" import owner_marks with context %}
+{% block title %}Payments · Corpus — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Payments</h2>
+{% include "_payment_tabs.html" %}
+{% include "_flash.html" %}
+{% if is_admin(request) and not empty_flags.goals %}
+<p class="no-print"><a href="/corpus?add=goal#add-goal" class="add-action">+ Add corpus goal</a></p>
+{% else %}
+<p style="color:var(--muted)">Every corpus amount belongs to a goal with a target and due date (optionally with line items). All goals and progress: <a href="/corpus">Corpus</a>.</p>
+
+{% include "_corpus_pay_form.html" %}
+{% if is_admin(request) %}<p class="no-print" style="color:var(--muted)">New goals, line items and categories: <a href="/corpus">Corpus</a>.</p>{% endif %}
+
+{% if status_rows %}
+<div class="card">
+  <h3 style="margin-top:0">{% if is_admin(request) %}Status by flat{% else %}Your corpus status{% endif %} — open goals</h3>
+  <table>
+    <thead><tr><th>Flat</th><th>Goal</th><th>Share</th><th>Paid</th><th>Remaining</th><th>Due</th></tr></thead>
+    <tbody>
+    {% for r in status_rows %}
+      <tr class="reminder-{{ r.status }}">
+        <td>{{ r.flat.number }}</td>
+        <td><a href="/corpus/goals/{{ r.campaign.id }}">{{ r.campaign.name }}</a></td>
+        <td>₹{{ r.share }}</td>
+        <td>₹{{ r.paid }}</td>
+        <td>{% if r.remaining %}₹{{ r.remaining }}{% else %}<span class="badge ok">Paid</span>{% endif %}</td>
+        <td>
+          {% if r.status == 'overdue' %}<span class="badge bad">Overdue · {{ r.due_date|format_date }}</span>
+          {% elif r.status == 'due_soon' %}<span class="badge warn">Due {{ r.due_date|format_date }}</span>
+          {% elif r.due_date %}{{ r.due_date|format_date }}{% else %}—{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" style="color:var(--muted)">No open corpus goals.</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if status_rows %}
+    <tfoot><tr><td colspan="2"><strong>Total</strong></td><td><strong>₹{{ status_totals.share }}</strong></td><td><strong>₹{{ status_totals.paid }}</strong></td><td colspan="2"><strong>₹{{ status_totals.remaining }}</strong></td></tr></tfoot>
+    {% endif %}
+  </table>
+  {% if not is_admin(request) %}
+  <p style="color:var(--muted);margin-bottom:0">Building: ₹{{ building.collected }} collected · ₹{{ building.pending }} pending on open goals.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if payments %}
+<div class="card">
+  <h3 style="margin-top:0">{% if is_admin(request) %}Corpus payments{% else %}Your corpus payments{% endif %}</h3>
+  <table>
+    <thead><tr><th>Date</th><th>Flat</th><th>Goal</th><th>Amount</th><th>Mode / note</th>{% if is_admin(request) %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for p in payments %}
+      <tr>
+        <td>{{ p.paid_on|format_date }}</td>
+        <td>{{ p.flat.number }}</td>
+        <td>{% if p.campaign %}<a href="/corpus/goals/{{ p.campaign.id }}">{{ p.campaign.name }}</a>{% if p.line_item %} › {{ p.line_item.title }}{% endif %}{% else %}{{ p.description or '—' }}{% endif %}</td>
+        <td>₹{{ p.amount }}</td>
+        <td>{% if p.payment_mode %}{{ p.payment_mode }} · {% endif %}{{ p.payment_note or '—' }}{{ paid_to(p) }}
+          {{ owner_marks(p, 'corpus_payment', cancel_pending, '/payments/corpus') }}</td>
+        {% if is_admin(request) %}
+        <td>
+          <form method="post" action="/corpus/{{ p.id }}/revert" class="inline" onsubmit="return confirm('Revert this payment? The share stays, so the amount becomes due again.')">
+            <button class="secondary">Revert</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+    {% else %}
+      <tr><td colspan="6" style="color:var(--muted)">No corpus payments yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

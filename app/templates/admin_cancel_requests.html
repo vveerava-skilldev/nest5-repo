@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Cancel requests — Admin{% endblock %}
+{% block content %}
+<h2>Owner cancel requests</h2>
+<p style="color:var(--muted)">Approving removes the entry (maintenance or line-item corpus payments go back to unpaid; expenses and collection payments are deleted) and is audited. For an owner's <strong>common expense</strong> there are three outcomes: <em>Approve cancel</em> removes it, <em>Reject expense</em> takes it out of the expenses list, pending reimbursement and every total (the owner still sees it under My submissions as Rejected, and you can delete it from Expenses › Rejected expenses), and <em>Keep entry</em> leaves it counted. For other entries <em>Reject cancel</em> keeps the entry as it is.</p>
+{% include "_flash.html" %}
+<div class="card">
+  <table>
+    <thead><tr><th>Requested</th><th>By</th><th>Flat</th><th>Entry</th><th>Reason</th><th>Status</th><th class="no-print">Decision</th></tr></thead>
+    <tbody>
+    {% for r in requests %}
+      <tr>
+        <td>{{ r.created_at|format_datetime }}</td>
+        <td>{{ r.requested_by.username }}</td>
+        <td>{{ r.flat.number if r.flat else '—' }}</td>
+        <td>{{ labels.get(r.record_type, r.record_type) }}: {{ r.summary }}</td>
+        <td>{{ r.reason or '—' }}</td>
+        <td>
+          {% if r.status == 'pending' %}<span class="badge warn">Pending</span>
+          {% elif r.status == 'approved' %}<span class="badge ok">Approved</span>
+          {% elif r.record_type == 'expense' and r.record_id not in counted_expenses %}<span class="badge bad">Expense rejected / removed</span>
+          {% else %}<span class="badge bad">Cancel rejected — entry kept</span>{% endif %}
+          {% if r.decided_at %}<br><small>{{ r.decided_at|format_datetime }} · {{ r.decided_by }}{% if r.decision_note %} — {{ r.decision_note }}{% endif %}</small>{% endif %}
+        </td>
+        <td class="no-print">
+          {% if r.status == 'pending' %}
+          <form method="post" action="/admin/cancel-requests/{{ r.id }}/approve" class="inline" onsubmit="return confirm('Approve and remove this entry?')">
+            <input type="text" name="note" placeholder="Note (optional)">
+            <button type="submit" class="danger" title="Remove the entry">Approve cancel</button>
+          </form>
+          <form method="post" action="/admin/cancel-requests/{{ r.id }}/reject" class="inline">
+            <input type="text" name="note" placeholder="Reason (optional)">
+            {% if r.record_type == 'expense' %}
+            <button type="submit" class="danger" title="Reject the expense: it leaves the lists, pending reimbursement and all totals">Reject expense</button>
+            <button type="submit" class="secondary" formaction="/admin/cancel-requests/{{ r.id }}/keep" title="Keep the entry; it still counts">Keep entry</button>
+            {% else %}
+            <button type="submit" class="secondary" title="Keep the entry; it still counts">Reject cancel (keep entry)</button>
+            {% endif %}
+          </form>
+          {% elif r.record_type == 'expense' and r.status == 'rejected' and r.record_id in counted_expenses %}
+          <form method="post" action="/admin/cancel-requests/{{ r.id }}/reject" class="inline" onsubmit="return confirm('Reject this expense? It will leave the expenses list, pending reimbursement and all totals.')">
+            <input type="text" name="note" placeholder="Reason (optional)">
+            <button type="submit" class="danger" title="This expense still counts; reject it now">Reject expense now</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" style="color:var(--muted)">No cancel requests.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

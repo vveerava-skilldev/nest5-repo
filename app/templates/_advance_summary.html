@@ -1,0 +1,7 @@
+{# expects `adv` from balances.owner_advances: consolidated paid / settled / owed back across the owner's flats #}
+<div class="adv-summary" role="group" aria-label="Expenses you paid, summary">
+  <div class="adv-paid"><span>Paid by you</span><strong>₹{{ adv.paid_total }}</strong></div>
+  <div class="adv-settled"><span>Settled</span><strong>₹{{ adv.settled_total }}</strong></div>
+  <div class="adv-owed{% if adv.owed %} due{% else %} clear{% endif %}"><span>Owed back</span><strong>₹{{ adv.owed }}</strong></div>
+</div>
+<p class="adv-count">{{ adv.count }} expense{{ '' if adv.count == 1 else 's' }}{% if adv.unsettled_count %} · {{ adv.unsettled_count }} waiting to be settled{% endif %}{% if adv.settled_count %} · {{ adv.settled_count }} settled{% endif %}</p>

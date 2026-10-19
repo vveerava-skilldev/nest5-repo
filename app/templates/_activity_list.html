@@ -1,0 +1,12 @@
+{# expects `recent_activity` (list from activity.humanize) #}
+<ul class="activity-list">
+{% for a in recent_activity %}
+  <li class="activity-item">
+    <span class="activity-badge {{ a.role }}">{{ a.badge }}</span>
+    <div class="activity-body">
+      <div class="activity-text">{{ a.sentence }}</div>
+      <div class="activity-meta">{{ a.when|format_datetime }}</div>
+    </div>
+  </li>
+{% endfor %}
+</ul>

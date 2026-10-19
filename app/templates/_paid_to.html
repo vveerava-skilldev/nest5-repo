@@ -1,0 +1,2 @@
+{# v7.3: the account a payment was made to, as recorded when it was submitted (never the live setting). #}
+{% macro paid_to(row) %}{% if row.payee_vpa %}<span class="paid-to" title="{{ row.payee_name or '' }}{% if row.payee_mobile %} · {{ row.payee_mobile }}{% endif %}">Paid to {{ row.payee_vpa }}</span>{% endif %}{% endmacro %}

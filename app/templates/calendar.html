@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Calendar — {{ portal_name }}{% endblock %}
+{% block content %}
+<div class="cal" id="cal">
+  <div class="cal-head">
+    <h2>Calendar</h2>
+    {% if can_edit %}<a class="cal-add" href="/calendar/events/new" role="button">+ Add event</a>{% endif %}
+  </div>
+  {% include "_flash.html" %}
+
+  <div class="cal-bar no-print">
+    <a class="cal-nav" href="/calendar?m={{ prev_key }}" aria-label="Previous month">‹</a>
+    <strong class="cal-title">{{ month_title }}</strong>
+    <a class="cal-nav" href="/calendar?m={{ next_key }}" aria-label="Next month">›</a>
+    <a class="cal-today{% if is_current %} on{% endif %}" href="/calendar">Today</a>
+    <form method="get" action="/calendar" class="inline cal-pick">
+      <select name="m" onchange="this.form.submit()" aria-label="Month">
+        {% for key, label in month_options %}<option value="{{ key }}"{% if key == month_key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </form>
+  </div>
+
+  <p class="cal-summary" id="cal-summary">This month: <strong>{{ summary.total }}</strong> item{{ '' if summary.total == 1 else 's' }}
+    · <strong>{{ summary.events }}</strong> event{{ '' if summary.events == 1 else 's' }}
+    · <strong class="{% if summary.overdue %}bad{% endif %}">{{ summary.overdue }}</strong> overdue</p>
+
+  <div class="cal-legend no-print" role="group" aria-label="Filter by type">
+    {% for key, label in types.items() %}
+    <button type="button" class="cal-filter t-{{ key }}" data-type="{{ key }}" aria-pressed="true"><i></i>{{ label }}</button>
+    {% endfor %}
+    <span class="cal-key"><i class="s-overdue"></i>Overdue</span>
+  </div>
+
+  <div class="cal-grid" role="grid" aria-label="{{ month_title }}">
+    {% for name in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}<div class="cal-dow" role="columnheader">{{ name }}</div>{% endfor %}
+    {% for week in weeks %}{% for d in week %}
+    <div class="cal-day{% if not d.in_month %} out{% endif %}{% if d.date == today %} today{% endif %}" role="gridcell">
+      {% if d.in_month %}
+      <span class="cal-num">{{ d.date.day }}</span>
+      {% for it in d['items'] %}
+      <button type="button" class="cal-chip t-{{ it.type }} s-{{ it.status }}{% if it.projected %} projected{% endif %}" data-id="{{ it.id }}" data-type="{{ it.type }}" title="{{ it.title }}">{% if it.time %}<small>{{ it.time[:5] }}</small> {% endif %}{{ it.title }}</button>
+      {% endfor %}
+      {% endif %}
+    </div>
+    {% endfor %}{% endfor %}
+  </div>
+
+  <div class="cal-agenda" aria-label="Agenda for {{ month_title }}">
+    {% for day in agenda %}
+    <section class="cal-agenda-day{% if day.date == today %} today{% endif %}">
+      <h3>{{ day.date.strftime('%a') }} {{ day.date|format_date }}{% if day.date == today %} <span class="badge ok">Today</span>{% endif %}</h3>
+      <ul>
+        {% for it in day['items'] %}
+        <li><button type="button" class="cal-row t-{{ it.type }} s-{{ it.status }}{% if it.projected %} projected{% endif %}" data-id="{{ it.id }}" data-type="{{ it.type }}">
+          <i></i><span class="cal-row-main"><strong>{{ it.title }}</strong>
+          <small>{{ it.type_label }}{% if it.time %} · {{ it.time }}{% endif %}{% if it.end_date %} · until {{ it.end_date|format_date }}{% endif %}{% if it.projected %} · expected{% endif %}{% if it.status == 'hidden' %} · hidden from owners{% endif %}</small></span>
+          {% if it.status == 'overdue' %}<span class="badge bad">Overdue</span>
+          {% elif it.status == 'paid' %}<span class="badge ok">Paid</span>
+          {% elif it.status == 'done' %}<span class="badge ok">Done</span>{% endif %}
+        </button></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% else %}
+    <p class="card" style="color:var(--muted)">Nothing scheduled in {{ month_title }}.</p>
+    {% endfor %}
+  </div>
+
+  <aside class="cal-panel" id="cal-panel" hidden aria-live="polite">
+    <div class="cal-panel-head">
+      <span class="cal-panel-type" id="cal-p-type"></span>
+      <button type="button" class="secondary" id="cal-p-close" aria-label="Close">✕</button>
+    </div>
+    <h3 id="cal-p-title"></h3>
+    <p class="cal-p-when" id="cal-p-when"></p>
+    <p><span class="badge" id="cal-p-status"></span></p>
+    <ul id="cal-p-lines"></ul>
+    <div class="cal-p-actions">
+      <a id="cal-p-link" href="#" hidden></a>
+      {% if can_edit %}
+      <form method="post" id="cal-p-delete" hidden onsubmit="return confirm('Delete this event?')">
+        <button type="submit" class="danger">Delete event</button>
+      </form>
+      {% endif %}
+    </div>
+  </aside>
+  <script type="application/json" id="cal-data">{{ items_json|safe }}</script>
+</div>
+<script src="/static/js/calendar.js" defer></script>
+{% endblock %}

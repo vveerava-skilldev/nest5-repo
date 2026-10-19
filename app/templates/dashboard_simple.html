@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — {{ portal_name }}{% endblock %}
+{% block content %}
+{% set s = simple %}
+{% set sel = s.selected %}
+<div class="sv">
+{% include "_flash.html" %}
+{% include "_view_toggle.html" %}
+
+{% if period and nav %}
+<div class="sv-month no-print">
+  {% if nav.prev %}<a href="/?view=simple&period_id={{ nav.prev.id }}" aria-label="Previous month">‹</a>{% else %}<span class="sv-dim">‹</span>{% endif %}
+  <form method="get" action="/" class="inline">
+    <input type="hidden" name="view" value="simple">
+    <select name="period_id" onchange="this.form.submit()" aria-label="Month">
+      {% for p in nav.periods %}<option value="{{ p.id }}"{% if p.id == period.id %} selected{% endif %}>{{ '%02d'|format(p.month) }}-{{ p.year }}</option>{% endfor %}
+    </select>
+  </form>
+  {% if nav.next %}<a href="/?view=simple&period_id={{ nav.next.id }}" aria-label="Next month">›</a>{% else %}<span class="sv-dim">›</span>{% endif %}
+</div>
+{% endif %}
+
+<div class="sv-metrics{% if s.owed_back %} four{% endif %}">
+  <div><span>Account balance</span><strong>₹{{ s.held }}</strong></div>
+  <div><span>Effective balance</span><strong{% if s.effective < 0 %} class="bad"{% endif %}>₹{{ s.effective }}</strong></div>
+  <div class="{% if s.total_due %}due{% else %}clear{% endif %}"><span>You owe</span><strong>₹{{ s.total_due }}</strong></div>
+  {% if s.owed_back %}<div class="owed-back"><span>Unsettled — owed to you</span><strong>₹{{ s.owed_back }}</strong></div>{% endif %}
+</div>
+
+<div class="sv-flats">
+  {% for f in s.flats %}
+  <a href="/flats/{{ f.flat.id }}" class="sv-flat">
+    <strong>Flat {{ f.flat.number }}</strong>
+    {% if f.maintenance.has_items %}
+      <span>{% if period %}{{ '%02d'|format(period.month) }}-{{ period.year }} {% endif %}maintenance</span>
+      {% if f.maintenance.is_paid %}<span class="badge ok">Paid</span>{% else %}<span class="badge warn">₹{{ f.maintenance.amount }} due</span>{% endif %}
+    {% else %}<span>No maintenance row</span>{% endif %}
+  </a>
+  {% else %}
+  <p class="sv-empty">No flat is linked to your login yet — ask the admin.</p>
+  {% endfor %}
+</div>
+
+<section class="sv-dues-box">
+  <div class="sv-dues-head">
+    <h3>Your dues to pay</h3>
+    {% if s.overdue %}<span class="badge bad">{{ s.overdue }} overdue</span>{% endif %}
+  </div>
+  {% if s.dues %}
+  <ul class="sv-dues">
+    {% for d in s.visible %}
+    <li class="sv-due-row {{ d.status }}">
+      <a class="sv-due" href="{% if d.key %}/?view=simple{% if period %}&period_id={{ period.id }}{% endif %}&pay={{ d.key }}{% else %}{{ d.link }}{% endif %}">
+        <span class="sv-due-main">
+          <strong>{{ d.title }}{% if d.due_hint and not d.due_date %} <span class="sv-hint">({{ d.due_hint }})</span>{% endif %}</strong>
+          <small>Flat {{ d.flat.number }} ·
+            {% if d.status == 'overdue' %}<b class="bad">Overdue</b>{% if d.due_date %} {{ d.due_date|format_date }}{% endif %}
+            {% elif d.due_date %}<b{% if d.status == 'due_soon' %} class="warn"{% endif %}>Due {{ d.due_date|format_date }}</b>
+            {% else %}Pending{% endif %}</small>
+        </span>
+        <span class="sv-amt">₹{{ d.amount }}</span>
+      </a>
+      {% if d.key and d.upi_link %}<a class="sv-upi" href="/?view=simple{% if period %}&period_id={{ period.id }}{% endif %}&pay={{ d.key }}" title="Open the Pay now screen">Pay now</a>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% if s.hidden_count %}<a class="sv-more" href="{{ s.more_url }}">+ {{ s.hidden_count }} more dues</a>
+  {% elif s.can_collapse %}<a class="sv-more" href="{{ s.back_url }}">Show fewer</a>{% endif %}
+  {% else %}
+  <p class="sv-empty"><span class="badge ok">✓</span> Nothing outstanding — thank you!</p>
+  {% endif %}
+</section>
+
+{% if s.advance_summary %}
+<section class="sv-dues-box sv-advances">
+  <div class="sv-dues-head"><h3>Expenses you paid</h3>{% if s.owed_back %}<span class="badge warn">₹{{ s.owed_back }} to be reimbursed</span>{% else %}<span class="badge ok">All settled</span>{% endif %}</div>
+  {% set adv = s.advance_summary %}{% include "_advance_summary.html" %}
+  {% if s.advances %}
+  <ul class="sv-dues">
+    {% for e in s.advances[:3] %}
+    <li class="sv-due-row open">
+      <a class="sv-due sv-adv" href="/payments/expenses">
+        <span class="sv-due-main"><strong>{{ e.description }}</strong><small>Flat {{ e.paid_by_flat.number }} · {{ e.expense_date|format_date }} · waiting to be settled</small></span>
+        <span class="sv-amt">₹{{ e.amount }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if s.advances|length > 3 %}<a class="sv-more" href="/payments/expenses">+ {{ s.advances|length - 3 }} more waiting to be settled</a>{% endif %}
+  {% endif %}
+</section>
+{% endif %}
+
+{% if sel %}
+{% set p = sel.pay %}
+<div class="sv-sheet-wrap" id="pay">
+  <a class="sv-backdrop" href="{{ s.back_url }}" aria-label="Close"></a>
+  <form class="sv-sheet" method="post"{% if sel.partial %} data-partial="1" data-remaining="{{ sel.amount }}" data-total="{{ p.total }}" data-paid="{{ p.paid }}"{% endif %}
+        action="{% if p.period_id %}/owner/maintenance{% elif p.campaign_id %}/corpus/pay{% else %}/owner/projects/pay{% endif %}">
+    <header>
+      <strong>Pay: {{ sel.title }}</strong>
+      <a href="{{ s.back_url }}" aria-label="Close">✕</a>
+    </header>
+    <p class="sv-sub">Flat {{ sel.flat.number }} · ₹{{ sel.amount }} {% if sel.partial %}remaining (part payment allowed){% else %}due{% endif %}{% if sel.due_hint %} · {{ sel.due_hint }}{% endif %}</p>
+    <input type="hidden" name="back" value="{{ s.back_url }}">
+    {% if p.period_id %}
+    <input type="hidden" name="flat_id" value="{{ sel.flat.id }}">
+    <input type="hidden" name="period_id" value="{{ p.period_id }}">
+    {% elif p.campaign_id %}
+    <input type="hidden" name="target" value="{{ sel.flat.id }}:{{ p.campaign_id }}">
+    {% else %}
+    <input type="hidden" name="share_id" value="{{ p.share_id }}">
+    {% endif %}
+    {% if sel.upi_link %}
+    <section class="sv-paynow" aria-label="Pay now">
+      <dl class="sv-payto">
+        <dt>Pay to UPI ID</dt><dd id="pay-vpa">{{ sel.upi_vpa }}</dd>
+        <dt>or mobile number</dt><dd id="pay-mobile">{{ sel.upi_mobile }}</dd>
+        <dt>Payee</dt><dd class="sv-payee-name" id="pay-payee">{{ sel.upi_payee }}</dd>
+      </dl>
+      <div class="sv-apps">
+        <a class="sv-app" data-open-app="phonepe" href="{{ sel.phonepe_launch }}">Open PhonePe</a>
+      </div>
+    </section>
+    {% endif %}
+    <div class="sv-fields">
+      <label>Date paid<input type="date" name="paid_on" value="{{ s.today.isoformat() }}" required></label>
+      <label>Amount (₹)<input type="number" name="amount" id="pay-amount" value="{{ sel.amount }}" min="1" max="{{ sel.amount }}" step="1" inputmode="numeric" required{% if not sel.partial %} readonly{% endif %}></label>
+      <label>Mode
+        <select name="payment_mode" id="pay-mode">
+          {% for m in ['UPI', 'Cash', 'Bank transfer', 'Cheque', 'Other'] %}<option>{{ m }}</option>{% endfor %}
+        </select>
+      </label>
+      <label><span id="utr-label">UPI reference (UTR) — required</span><input type="text" name="payment_note" id="pay-utr" maxlength="30" minlength="8" pattern="[A-Za-z0-9]{8,30}" required autocomplete="off" autocapitalize="characters" placeholder="e.g. 412345678901" title="8 to 30 letters or digits, no spaces"></label>
+    </div>
+    {% if sel.partial %}
+    <p class="sv-amt-hint" id="amt-hint" aria-live="polite">Pays this off in full</p>
+    <p class="sv-amt-error" id="amt-error" role="alert" hidden></p>
+    {% endif %}
+    <div class="sv-actions">
+      <button type="submit">Submit payment</button>
+    </div>
+    <p class="sv-note">The admin checks the UTR and approves it; nothing is marked paid until then.</p>
+  </form>
+</div>
+{% endif %}
+</div>
+{% endblock %}

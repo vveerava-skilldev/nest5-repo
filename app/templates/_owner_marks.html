@@ -1,0 +1,31 @@
+{% macro owner_marks(record, record_type, cancel_pending, back) %}
+  {% if record.submitted_by_user_id %}
+    {% if is_admin(request) and record_type != 'expense' %}
+    <details class="inline-details no-print">
+      <summary>Reject</summary>
+      <form method="post" action="/admin/submissions/{{ record_type }}/{{ record.id }}/reject" class="inline" onsubmit="return confirm('Reject this payment? It stops counting everywhere; the owner sees it as Rejected.')">
+        <input type="hidden" name="back" value="{{ back }}">
+        <input type="text" name="reason" maxlength="255" placeholder="Reason (optional)">
+        <button type="submit" class="danger">Reject payment</button>
+      </form>
+    </details>
+    {% endif %}
+    <span class="badge owner-badge" title="Recorded by the owner{% if record.submitted_by %} ({{ record.submitted_by.username }}){% endif %}">Submitted by owner{% if record.submitted_by and is_admin(request) %} · {{ record.submitted_by.username }}{% endif %}</span>
+    {% set req = cancel_pending.get(record.id) if cancel_pending else None %}
+    {% if req %}
+      <span class="badge warn" title="{{ req.reason or '' }}">Cancel requested</span>
+      {% if is_admin(request) %}<a href="/admin/cancel-requests">Review</a>{% endif %}
+    {% elif record.submitted_by_user_id == request.state.user_id|default(None) %}
+      <details class="inline-details no-print">
+        <summary>Request cancel</summary>
+        <form method="post" action="/owner/cancel-requests" class="inline">
+          <input type="hidden" name="record_type" value="{{ record_type }}">
+          <input type="hidden" name="record_id" value="{{ record.id }}">
+          <input type="hidden" name="back" value="{{ back }}">
+          <input type="text" name="reason" placeholder="Reason (optional)">
+          <button type="submit" class="secondary">Send request</button>
+        </form>
+      </details>
+    {% endif %}
+  {% endif %}
+{% endmacro %}

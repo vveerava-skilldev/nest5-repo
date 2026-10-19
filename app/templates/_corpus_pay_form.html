@@ -1,0 +1,60 @@
+{# Pay a corpus goal (optionally a line item under it). Needs: status_rows (open goal x flat rows), back, today. #}
+{% set payable = status_rows|selectattr('remaining')|list %}
+<div class="card no-print">
+  <h3 style="margin-top:0">{% if is_admin(request) %}Record a corpus payment{% else %}Pay corpus{% endif %}</h3>
+  {% if payable %}
+  <form method="post" action="/corpus/pay" class="expense-form corpus-pay-form">
+    <input type="hidden" name="back" value="{{ back }}">
+    <div class="expense-form-grid">
+      <label class="span-2">Which goal
+        <select name="target" class="corpus-target" required>
+          {% for r in payable %}
+          <option value="{{ r.flat.id }}:{{ r.campaign.id }}" data-remaining="{{ r.remaining }}" data-campaign="{{ r.campaign.id }}">Flat {{ r.flat.number }} · {{ r.campaign.name }}{% if r.campaign.category %} ({{ r.campaign.category }}){% endif %} — share ₹{{ r.share }}, paid ₹{{ r.paid }}, remaining ₹{{ r.remaining }}{% if r.due_date %} (due {{ r.due_date|format_date }}){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% set ns = namespace(items=[]) %}
+      {% for r in payable %}{% for li in r.campaign.line_items %}{% if li not in ns.items %}{% set ns.items = ns.items + [li] %}{% endif %}{% endfor %}{% endfor %}
+      {% if ns.items %}
+      <label class="corpus-line-wrap">Line item
+        <select name="line_item_id" class="corpus-line">
+          <option value="" data-campaign="*">Whole goal (no specific item)</option>
+          {% for li in ns.items %}
+          <option value="{{ li.id }}" data-campaign="{{ li.campaign_id }}">{{ li.title }}{% if li.target_amount %} (₹{{ li.target_amount }}){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% endif %}
+      <label>Amount (₹)<input type="number" name="amount" min="1" class="corpus-amount" value="{{ payable[0].remaining }}" max="{{ payable[0].remaining }}" required title="Part payments allowed"></label>
+      <label>Payment date<input type="date" name="paid_on" value="{{ today|iso_date }}" required></label>
+      <label>Mode<select name="payment_mode">{% for m in payment_modes %}<option>{{ m }}</option>{% endfor %}</select></label>
+      <label>Note<input type="text" name="payment_note" placeholder="UPI ref / remarks"></label>
+      <button type="submit">Pay</button>
+    </div>
+  </form>
+  <script>
+  (function () {
+    const form = document.currentScript.previousElementSibling;
+    const sel = form.querySelector(".corpus-target"), amt = form.querySelector(".corpus-amount");
+    const line = form.querySelector(".corpus-line"), wrap = form.querySelector(".corpus-line-wrap");
+    function sync() {
+      const opt = sel.selectedOptions[0];
+      amt.max = opt.dataset.remaining; amt.value = opt.dataset.remaining;
+      if (!line) return;
+      let any = false;
+      line.querySelectorAll("option").forEach((o) => {
+        const show = o.dataset.campaign === "*" || o.dataset.campaign === opt.dataset.campaign;
+        o.hidden = !show; o.disabled = !show;
+        if (show && o.value) any = true;
+      });
+      if (line.selectedOptions[0] && line.selectedOptions[0].disabled) line.value = "";
+      wrap.hidden = !any;
+    }
+    sel.addEventListener("change", sync);
+    sync();
+  })();
+  </script>
+  {% else %}
+  <p style="margin:0"><span class="badge ok">✓</span> Nothing due on open corpus goals{% if not is_admin(request) %} for your flat{% endif %}.</p>
+  {% endif %}
+</div>
