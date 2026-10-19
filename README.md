@@ -14,7 +14,7 @@ pip install -r requirements.txt
 cp .env.example .env   # optional — defaults work for local dev
 
 alembic upgrade head
-python3 scripts/seed.py
+python3 scripts/seed.py          # roster + assets + payment settings only; add --sample for demo months
 
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
@@ -135,6 +135,21 @@ Open **http://localhost:8000** — username **`admin`**, password **`nest5admin`
 - **Version label:** `version: nest5-v7.2`. Code-only update from v7.1: no new packages, no migration (head stays `e5c1a7b9d204`).
 - Tests: `tests/test_v72_features.py`.
 
+### Reports, settlement notes, optional sample data (v7.4)
+
+- **Version label:** `version: nest5-v7.4`. **No migration** (alembic head stays `b4e7c2a9d531`); no new packages; code-only upgrade.
+- **Reports (admin only, read-only): `/admin/reports`** (menu item "Reports"; owners and tenants get 403). Choose a report type (**Consolidated summary**, **Monthly trend**, **One category in detail**), a period (**All time**, a **financial year Apr-Mar**, or a **month range**), an optional **flat**, and whether to also list **rejected / cancelled / reverted** items. Those are always shown separately ("Not counted") and never added to a total.
+  - **Consolidated summary:** plain-language tiles with a one-line definition under each number. *Maintenance* billed / collected / pending, per month. *Corpus* per goal (and sub-goal line item): target, shares, collected, pending, plus a total. *Projects* per project: budget, share per flat, shares, collected, pending, plus a grand total (there is no separate sub-project entity; open "Detail" for the per-flat breakdown). *Expenses* total / settled / unsettled / owed to owners, by category, paid by a flat vs from the Account Balance. *Settlements* paid out. A **Reconciliation** block ties opening + collected - paid out = closing for every month, checks the opening of each month against the previous closing, and cross-checks the report against the code the dashboard, Balances page and flat statements use (`compute_fund_balance`, `balances.overview`, `flat_balances`, `expense_total`, goal and project totals). A green check means it ties; any difference shows a warning and the figures that differ. Corpus and project money is shown as held separately from the Account Balance.
+  - **Monthly trend:** a table by month (maintenance billed / collected / pending, corpus, projects, expenses, paid out, opening and closing balance) with inline SVG charts (no new JavaScript libraries) and a "Running totals" option.
+  - **Drilldown:** every amount is a link to the entries behind it: date (dd-mm-yyyy), flat / owner, type, amount, mode, UTR, payee UPI ID, status, recorded by, recorded at (IST), note (a settlement's note appears here). The footer total equals the number you clicked (built from the same selection, so it cannot differ); pagination, breadcrumb and a back link included.
+  - **Exports** of the current screen: CSV, **Excel** (sheets Parameters - filters, generated-at IST, app version, generated-by - then Summary, Trend, Details; dates are real dd-mm-yyyy cells) and **PDF** (titled, filters stated, page numbers). Each export writes an audit-log entry ("admin exported the ... report as CSV") with the report, format and filters.
+  - **Counting rules** match the rest of the app: `Expense.counted()` for expenses, paid rows for payments, live settlements. Months: maintenance uses its ledger month; expenses and settlements the ledger month they belong to; corpus and project payments the month they were paid; shares and pending amounts are "as of today" (not narrowed by the month range, only by the flat). The reconciliation block always covers the whole society.
+  - Phone-friendly: tables turn into cards under 768 px; empty states explain what to change; glossary tooltips on column headings.
+- **Edit a settlement's note (admin only):** the "Recent settlements" table on `/settlements` has a Note box with Save note, and a settled expense's Edit panel on `/expenses` has the same field (`POST /settlements/{id}/note`). Audited as `settlement` / `edit_note` (shown in Activity as "admin edited settlement note", with the old and new text in the audit log). The amount, date, expense and balances are untouched; a reverted settlement cannot be edited; owners and tenants get 403. The note shows on the Settlements and Expenses pages, in the Reports drilldown and exports, and in the existing raw Excel / CSV / JSON exports and summary PDF.
+- **Seed data is optional, and ships no sample expenses or settlements.** `scripts/seed.py` always sets up the flat roster, the standard asset register and the initial payment settings. The Sep-Oct 2026 demo months (every flat's maintenance marked paid, one open complaint) are created only with `python scripts/seed.py --sample` (or `SEED_SAMPLE_DATA=1`); even then there are no expenses and no settlements (the old "Flat 101 advance", "Common expense 1/2/3", "Watchman salary" and their "Reimbursed from maintenance fund" / "Paid from maintenance fund" settlement notes are gone). Running the seed against a database that already has ledger data changes nothing, so live data is not affected. Tests that relied on the old sample numbers (Sept closing 4,955, fund 10,955, Watchman salary) now build that data in `tests/legacy_seed.py`.
+- **Deploy:** code-only; copy the new files over and restart with a single uvicorn worker (no `alembic upgrade` needed, none pending).
+- Tests: `tests/test_v74_reports.py` (totals tie to dashboard / balances / flat statements, every clicked number equals its drilldown footer, trend months sum to the totals, reconciliation ties and warns when forced to mismatch, excluded items, closed months, sub-goal and project totals, exports match the screen and are audited, access control, empty states, flat / FY / month-range controls), `tests/test_v74_settlement_note.py`, `tests/test_v74_seed.py`; the dd-mm-yyyy / IST crawl in `tests/test_v73_date_format.py` also covers the Reports pages.
+
 ### Automatic monthly dues, recurring admin tasks, simpler Pay now, admin-set payment details (v7.3)
 
 - **Version label:** `version: nest5-v7.3`. Two migrations, `a3d9e6c1b852` (revises `e5c1a7b9d204`) and `b4e7c2a9d531` (revises `a3d9e6c1b852`; head); no new packages.
@@ -153,6 +168,10 @@ Open **http://localhost:8000** — username **`admin`**, password **`nest5admin`
 - **L. Pay now footer.** An owner's payment counts the moment it is submitted (it is recorded against the due, Submitted by owner); the admin then verifies the UTR against the UPI statement and can Reject it, which makes the due reappear and shows it to the owner as Rejected. The sheet footer says exactly that: "Your payment is recorded right away against this due. The admin then checks the UTR against the UPI statement; if it can't be matched, the admin rejects it and the due comes back."
 - **Deploy:** unzip, keep `nest5.db`, `instance/`, `backups/`, `.env`, run `alembic upgrade head` (`./run-local.sh` does it) and restart with a single uvicorn worker.
 - Tests: `tests/test_v73_monthly.py`, `test_v73_job.py`, `test_v73_recurring.py`, `test_v73_payment_settings.py`, `test_v73_user_delete.py`, `test_v73_payee_report.py`, `test_v73_dashboard_layout.py`, `test_v73_date_format.py`, `test_v73_ist.py`, `test_flats.py`, `test_v73_migration.py` (migration from scratch, up-down-up, after the startup safety net, over v7.2-style data); the Pay now and due-date tests were updated for the simpler sheet and the 5th.
+
+### Upgrading from v7.3 (keep your `nest5.db`, `instance/`, `backups/`, `.env`)
+
+Unzip `nest5-ledger-v7.4.zip` into a new folder, copy `nest5.db`, `instance/`, `backups/` and `.env` over, then `./run-local.sh` (no migration is pending; `alembic upgrade head` is a no-op) and run a single uvicorn worker. No new packages. Or, on a running server, copy only the changed files listed in the release notes and restart.
 
 ### Upgrading from v7.2 (keep your `nest5.db`, `instance/`, `backups/`, `.env`)
 
@@ -222,6 +241,8 @@ Unzip `nest5-ledger-v7.zip` into a new folder, copy `nest5.db`, `instance/`, `ba
 | `/upi/qr.svg` | UPI QR (still served, no longer linked from the pay sheet since v7.3) |
 | `/admin/recurring` | Recurring admin tasks: watchman salary, common EB, ... (v7.3, admin only) |
 | `/admin/payment-settings`, `/admin/payment-settings/history` | UPI ID / mobile / payee settings and their append-only history (v7.3, admin only) |
+| `/admin/reports` (+ `/drill`, `/export.csv`, `/export.xlsx`, `/export.pdf`) | Reports: consolidated summary, monthly trend, category detail, drilldown, exports (v7.4, admin only, read-only) |
+| `/settlements/{id}/note` (POST) | Edit a settlement's note (v7.4, admin only) |
 | `/admin/payee-report` (+ `/export.csv`, `/export.xlsx`, `/export.pdf`) | Payee / UPI audit report (v7.3, admin only, read-only) |
 | `/calendar` | Calendar: tasks, dues, events (v8; admin + owners) |
 | `/calendar/events/new`, `/calendar/events/{id}/edit` | Add / edit calendar events (admin only) |
@@ -246,11 +267,11 @@ Legacy `/maintenance` and `/payments` redirect to the payments URLs; `/corpus/ca
 
 Contact phone fields are optional placeholders (“Filled later” in UI) until updated.
 
-## Seeded notebook snapshot
+## Optional sample data (`python scripts/seed.py --sample`)
 
-- **September 2026:** collections ₹10,000; expenses ₹5,045; fund balance ₹4,955
-- **October 2026:** collections ₹10,000; watchman salary ₹4,000; lift-doors complaint
-- **Carry-forward:** **₹10,955**
+- **September 2026:** collections ₹10,000; no expenses; closing balance ₹10,000
+- **October 2026:** collections ₹10,000; lift-doors complaint
+- **Fund balance:** ₹20,000. No sample expenses or settlements are created (v7.4).
 
 ## Tests
 

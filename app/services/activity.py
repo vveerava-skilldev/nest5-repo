@@ -46,6 +46,7 @@ ENTITY_WORDS = {
     "user": "user account",
     "app_setting": "setting",
     "database": "database",
+    "report": "report",
     "submission": "owner submission",
 }
 
@@ -221,7 +222,8 @@ def _sentence(entry: AuditLog, role: str, lk: Lookups) -> tuple[str, str | None,
         if verb:
             return f"{verb}{who_for}", None, None
     elif t == "settlement":
-        verb = {"create": "settled an expense", "update": "settled an expense", "revert": "reverted a settlement"}.get(a)
+        verb = {"create": "settled an expense", "update": "settled an expense", "revert": "reverted a settlement",
+                "edit_note": "edited settlement note"}.get(a)
         if verb:
             return f"{verb}{amt}", flat, amount
     elif t == "expense_category":
@@ -275,6 +277,9 @@ def _sentence(entry: AuditLog, role: str, lk: Lookups) -> tuple[str, str | None,
         return "changed a setting", None, None
     elif t == "database" and a == "restore":
         return "restored the database from a backup", None, None
+    elif t == "report" and a == "export":
+        what = p.get("report") or "a"
+        return f"exported the {what} report as {str(p.get('format') or 'file').upper()}", None, None
     elif t == "submission":
         if a == "review":
             return f"marked an owner submission as reviewed ({ENTITY_WORDS.get(p.get('kind'), 'submission')})", None, None

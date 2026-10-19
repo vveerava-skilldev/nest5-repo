@@ -1,0 +1,39 @@
+{% macro money(c) -%}
+{%- if c.href %}<a href="{{ c.href }}" class="rpt-link">{{ c.v|inr }}</a>{% else %}{{ c.v|inr }}{% endif -%}
+{%- endmacro %}
+
+{% macro cell(c, label) -%}
+<td data-label="{{ label }}" class="{{ 'num' if c.money else '' }}{{ ' bold' if c.bold else '' }}{{ ' empty' if c.v == '' else '' }}">{% if c.money %}{{ money(c) }}{% else %}{{ c.v }}{% endif %}</td>
+{%- endmacro %}
+
+{% macro table(t) -%}
+<div class="rpt-table-wrap">
+<table class="rpt-table">
+  <thead><tr>
+    {% for h in t.header %}<th>{% if t.tips[loop.index0] %}<span class="tip" tabindex="0" data-tip="{{ t.tips[loop.index0] }}">{{ h }}</span>{% else %}{{ h }}{% endif %}</th>{% endfor %}
+  </tr></thead>
+  <tbody>
+  {% for r in t.rows %}
+    <tr>{% for c in r %}{{ cell(c, t.header[loop.index0]) }}{% endfor %}</tr>
+  {% else %}
+    <tr class="rpt-empty-row"><td colspan="{{ t.header|length }}">Nothing to show here for these filters.</td></tr>
+  {% endfor %}
+  </tbody>
+  {% if t.total and t.rows %}
+  <tfoot><tr class="rpt-total">{% for c in t.total %}{{ cell(c, t.header[loop.index0]) }}{% endfor %}</tr></tfoot>
+  {% endif %}
+</table>
+</div>
+{%- endmacro %}
+
+{% macro tiles(items) -%}
+<div class="rpt-tiles">
+  {% for t in items %}
+  <div class="rpt-tile">
+    <div class="rpt-tile-label">{{ t.label }}</div>
+    <div class="rpt-tile-value">{{ money(t) }}</div>
+    <div class="rpt-tile-def">{{ t.def }}</div>
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}

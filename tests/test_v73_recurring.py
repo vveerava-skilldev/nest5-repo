@@ -239,7 +239,10 @@ out["activity"] = admin.get("/admin/activity").text
     assert "by 5th" in out["admin_list"] and "before 10th" in out["admin_list"]
     assert out["actions_empty"] is False
     assert out["occ_due"] == "2026-10-22" and out["occ_due_after_edit"] == "2026-10-15"
-    assert "in 3 day(s)" in out["actions_soon"]
+    from datetime import date
+    from app.dates import ist_today
+
+    assert f"in {(date(2026, 10, 22) - ist_today()).days} day(s)" in out["actions_soon"]
     assert out["cal_item"] == ["Lift service check: due by 22nd"] and out["cal_status"] == ["open"] and out["cal_legend_admin"]
     assert out["owner_items"] == 0 and out["owner_legend"] is False
     assert out["owner_403"] == [403, 403, 403] and out["owner_actions_403"] == 403

@@ -108,7 +108,7 @@ def crawl(c, seeds, limit=250):
     return bad, len(seen)
 ADMIN_SEEDS = ["/", "/?view=simple", "/?period_id=1", "/?period_id=2", "/payments/maintenance", "/payments/corpus", "/payments/projects", "/payments/expenses", "/payments/building",
                "/calendar", "/calendar?m=2026-10", "/schedule", "/audit", "/admin/activity", "/admin/actions", "/admin/payment-settings", "/admin/payment-settings/history",
-               "/admin/payee-report?status=all", "/admin/payee-report?date_from=2026-10-01&date_to=2026-10-31", "/admin/recurring", "/settlements", "/corpus", "/projects", "/flats", "/expenses",
+               "/admin/payee-report?status=all", "/admin/reports", "/admin/reports?include=1", "/admin/reports?kind=trend&cum=1", "/admin/reports?kind=detail&cat=projects&include=1", "/admin/reports?kind=detail&cat=expenses&include=1", "/admin/payee-report?date_from=2026-10-01&date_to=2026-10-31", "/admin/recurring", "/settlements", "/corpus", "/projects", "/flats", "/expenses",
                "/admin/users", "/admin/export", "/complaints", "/periods/rollover", "/admin/cancel-requests", "/admin/maintenance-fee", "/calendar/events/new", "/admin/expense-categories", "/account/password"]
 OWNER_SEEDS = ["/", "/?view=simple", "/?view=detailed", "/?view=simple&period_id=2&pay=m-2-2", "/payments/maintenance", "/payments/corpus", "/payments/projects", "/payments/expenses", "/payments/building",
                "/calendar", "/schedule", "/owner/submissions", "/corpus", "/projects", "/expenses", "/complaints", "/account/password"]

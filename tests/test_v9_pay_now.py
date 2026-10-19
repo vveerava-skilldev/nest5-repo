@@ -157,7 +157,7 @@ def test_partial_then_exact_remaining_pays_off(seeded_db, admin_client, owner_cl
 
 
 def test_version_label_in_side_menu(seeded_db, owner_client, admin_client):
-    assert APP_VERSION == "nest5-v7.3"
+    assert APP_VERSION == "nest5-v7.4"
     for client in (owner_client, admin_client):
         page = client.get("/").text
         assert f'<p class="app-version">version: {APP_VERSION}</p>' in page

@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% from "_report_macros.html" import table, tiles, money %}
+{% block title %}Reports — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Reports</h2>
+<p class="muted">Read-only totals across maintenance, corpus, projects, expenses and settlements. Every amount is a link: click it to see the entries that add up to it.</p>
+
+<form method="get" action="/admin/reports" class="card rpt-controls" id="rpt-form">
+  <div class="rpt-field">
+    <label for="rpt-kind">Report</label>
+    <select name="kind" id="rpt-kind">{% for k, label in kinds.items() %}<option value="{{ k }}" {% if p.kind == k %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+  </div>
+  <div class="rpt-field">
+    <label for="rpt-cat">Category <span class="muted">(for “One category in detail”)</span></label>
+    <select name="cat" id="rpt-cat">{% for k, label in cats.items() %}<option value="{{ k }}" {% if p.cat == k %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+  </div>
+  <div class="rpt-field">
+    <label for="rpt-scope">Period</label>
+    <select name="scope" id="rpt-scope">
+      <option value="all" {% if p.scope == 'all' %}selected{% endif %}>All time</option>
+      <option value="fy" {% if p.scope == 'fy' %}selected{% endif %}>Financial year (Apr–Mar)</option>
+      <option value="months" {% if p.scope == 'months' %}selected{% endif %}>Month range</option>
+    </select>
+  </div>
+  <div class="rpt-field">
+    <label for="rpt-fy">Financial year</label>
+    <select name="fy" id="rpt-fy">{% for fy, label in fy_options %}<option value="{{ fy }}" title="{{ label }}" {% if fy == fy_selected %}selected{% endif %}>FY {{ fy }}-{{ '%02d'|format((fy + 1) % 100) }}</option>{% endfor %}</select>
+  </div>
+  <div class="rpt-field">
+    <label for="rpt-from">From month</label>
+    <select name="from" id="rpt-from"><option value="">Start</option>{% for v, label in month_options %}<option value="{{ v }}" {% if from_value == v %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+  </div>
+  <div class="rpt-field">
+    <label for="rpt-to">To month</label>
+    <select name="to" id="rpt-to"><option value="">Latest</option>{% for v, label in month_options %}<option value="{{ v }}" {% if to_value == v %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+  </div>
+  <div class="rpt-field">
+    <label for="rpt-flat">Flat</label>
+    <select name="flat" id="rpt-flat"><option value="">All flats</option>{% for f in flats %}<option value="{{ f.id }}" {% if p.flat == f.id %}selected{% endif %}>Flat {{ f.number }}{% if f.contact_name %} — {{ f.contact_name }}{% endif %}</option>{% endfor %}</select>
+  </div>
+  <div class="rpt-field rpt-checks">
+    <label><input type="checkbox" name="include" value="1" {% if p.include %}checked{% endif %}> Also show rejected / cancelled / reverted <span class="muted">(listed separately, never in totals)</span></label>
+    <label><input type="checkbox" name="cum" value="1" {% if p.cum %}checked{% endif %}> Running totals <span class="muted">(Monthly trend)</span></label>
+  </div>
+  <div class="rpt-field rpt-submit"><button type="submit">Show report</button></div>
+</form>
+
+<div class="rpt-bar">
+  <div class="rpt-scope"><strong>{{ filters[0][1] }}</strong> · {{ scope_text }} · {{ filters[2][1] }}</div>
+  <div class="rpt-exports no-print">
+    <span class="muted">Download this view:</span>
+    <a class="button secondary" href="/admin/reports/export.csv?{{ export_query }}">CSV</a>
+    <a class="button secondary" href="/admin/reports/export.xlsx?{{ export_query }}">Excel</a>
+    <a class="button secondary" href="/admin/reports/export.pdf?{{ export_query }}">PDF</a>
+  </div>
+</div>
+
+{% if d.drill %}
+{% set dr = d.drill %}
+<nav class="rpt-crumbs" aria-label="Breadcrumb"><a href="{{ back_url }}">Reports</a> › <a href="{{ back_url }}">{{ kinds[p.kind] }}{% if p.kind == 'detail' %}: {{ cats[p.cat] }}{% endif %}</a> › <span>{{ dr.title }}</span></nav>
+<div class="card">
+  <h3 style="margin-top:0">{{ dr.title }}</h3>
+  <p class="muted">{{ dr.def }}</p>
+  <p class="rpt-drill-total">Total of the {{ dr.count if dr.measure != 'excluded' else dr.excluded_count }} entr{{ 'y' if (dr.count if dr.measure != 'excluded' else dr.excluded_count) == 1 else 'ies' }}: <strong>{{ dr.total|inr }}</strong>
+    <span class="muted">— this is the number you clicked.</span></p>
+  {% if dr.all %}
+  {% set sm = dr.all|selectattr('mode')|list|length > 0 %}
+  {% set sr = dr.all|selectattr('ref')|list|length > 0 %}
+  {% set sv = dr.all|selectattr('vpa')|list|length > 0 %}
+  {% set sa = dr.all|selectattr('at')|list|length > 0 %}
+  {% set sn = dr.all|selectattr('note')|list|length > 0 %}
+  {% set rest = 3 + (1 if sm else 0) + (1 if sr else 0) + (1 if sv else 0) + (1 if sa else 0) + (1 if sn else 0) %}
+  <div class="rpt-table-wrap">
+  <table class="rpt-table rpt-drill">
+    <thead><tr><th>Date</th><th>Flat / owner</th><th>Type</th><th>Detail</th><th>Amount</th>{% if sm %}<th>Mode</th>{% endif %}{% if sr %}<th>UTR / reference</th>{% endif %}{% if sv %}<th>Payee UPI ID</th>{% endif %}<th>Status</th><th>Recorded by</th>{% if sa %}<th>Recorded at (IST)</th>{% endif %}{% if sn %}<th>Note</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for e in dr.rows %}
+      {% set v = row_values(e, dr.measure) %}
+      <tr class="{{ '' if e.counted else 'rpt-excluded' }}">
+        <td data-label="Date" class="nowrap {{ 'empty' if not v[0] }}">{{ v[0] }}</td>
+        <td data-label="Flat / owner" class="{{ 'empty' if not e.flat }}">{% if e.flat %}{{ e.flat }}{% if e.owner %} · {{ e.owner }}{% endif %}{% endif %}</td>
+        <td data-label="Type">{{ v[3] }}</td>
+        <td data-label="Detail">{{ v[4] }}</td>
+        <td data-label="Amount" class="num">{{ v[5]|inr }}</td>
+        {% if sm %}<td data-label="Mode" class="{{ 'empty' if not v[6] }}">{{ v[6] }}</td>{% endif %}
+        {% if sr %}<td data-label="UTR / reference" class="{{ 'empty' if not v[7] }}">{{ v[7] }}</td>{% endif %}
+        {% if sv %}<td data-label="Payee UPI ID" class="{{ 'empty' if not v[8] }}">{{ v[8] }}</td>{% endif %}
+        <td data-label="Status">{% if e.counted %}{{ v[9] }}{% else %}<span class="badge bad">Not counted</span> {{ e.status }}{% endif %}</td>
+        <td data-label="Recorded by">{{ v[10] }}</td>
+        {% if sa %}<td data-label="Recorded at (IST)" class="{{ 'empty' if not v[11] }}">{{ v[11] }}</td>{% endif %}
+        {% if sn %}<td data-label="Note" class="{{ 'empty' if not v[12] }}">{{ v[12] }}</td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr class="rpt-total"><td data-label="Total" colspan="4">Total ({{ dr.count if dr.measure != 'excluded' else dr.excluded_count }} entries{% if dr.excluded_count and dr.measure != 'excluded' %}; {{ dr.excluded_count }} not-counted row(s) listed but left out{% endif %})</td><td data-label="Amount" class="num bold">{{ dr.total|inr }}</td><td colspan="{{ rest }}"></td></tr>
+      {% if dr.pages > 1 %}<tr><td colspan="4">This page</td><td class="num">{{ dr.page_total|inr }}</td><td colspan="{{ rest }}"></td></tr>{% endif %}
+    </tfoot>
+  </table>
+  </div>
+  {% if dr.pages > 1 %}
+  <p class="rpt-pager">
+    {% if dr.page > 1 %}<a href="{{ p.url('/admin/reports/drill', drill=p.drill_query(), page=dr.page - 1) }}">‹ Previous</a>{% endif %}
+    Page {{ dr.page }} of {{ dr.pages }}
+    {% if dr.page < dr.pages %}<a href="{{ p.url('/admin/reports/drill', drill=p.drill_query(), page=dr.page + 1) }}">Next ›</a>{% endif %}
+  </p>
+  {% endif %}
+  {% else %}
+  <div class="rpt-empty"><strong>No entries behind this number.</strong><br>Nothing was recorded for these filters. Try a wider period, “All flats”, or tick “Also show rejected / cancelled / reverted”.</div>
+  {% endif %}
+  <p><a href="{{ back_url }}">‹ Back to the report</a></p>
+</div>
+
+{% elif p.kind == 'summary' %}
+{% set rc = d.recon %}
+<div class="rpt-banner {{ 'ok' if rc.ok else 'warn' }}">
+  {% if rc.ok %}<span class="rpt-tick">✓</span> <strong>Ties out.</strong> These totals agree with the Account Balance, the dashboard and the flats’ balances. <a href="#reconciliation">See the reconciliation</a>.
+  {% else %}<span class="rpt-tick">⚠</span> <strong>Check needed.</strong> {% if rc.bad %}{{ rc.bad|length }} figure(s) do not tie to the Account Balance / dashboard code.{% endif %}{% for w in rc.warnings %} {{ w }}{% endfor %} <a href="#reconciliation">See the reconciliation</a>.{% endif %}
+</div>
+{% for b in d.blocks %}
+<section class="card rpt-block" id="{{ b.id }}">
+  <h3 style="margin-top:0">{{ b.title }}{% if b.cat %} <a class="rpt-more" href="{{ p.url('/admin/reports', kind='detail', cat=b.cat) }}">Detail ›</a>{% endif %}</h3>
+  <p class="muted">{{ b.intro }}</p>
+  {% if b.tiles %}{{ tiles(b.tiles) }}{% endif %}
+  {% for t in b.tables %}{{ table(t) }}{% endfor %}
+</section>
+{% endfor %}
+<section class="card rpt-block" id="reconciliation">
+  <h3 style="margin-top:0">Reconciliation with the Account Balance</h3>
+  <p class="muted">Always covers the whole society (the flat filter is ignored here). The Account Balance is the maintenance fund; corpus and project money is held separately and is not part of it.</p>
+  {% if rc.months %}
+  <div class="rpt-statement">
+    <div><span>Opening balance ({{ rc.months[0].label }})</span><strong>{{ rc.opening|inr }}</strong></div>
+    <div><span>+ Maintenance collected</span><strong>{{ rc.collected|inr }}</strong></div>
+    <div><span>− Paid out to settle expenses</span><strong>{{ rc.paid_out|inr }}</strong></div>
+    <div class="total"><span>= Closing balance ({{ rc.months[-1].label }})</span><strong>{{ rc.closing|inr }}</strong> {% if rc.opening + rc.collected - rc.paid_out == rc.closing %}<span class="rpt-tick ok">✓</span>{% else %}<span class="rpt-tick warn">⚠</span>{% endif %}</div>
+  </div>
+  <div class="rpt-table-wrap"><table class="rpt-table">
+    <thead><tr><th>Month</th><th>Opening</th><th>Collected</th><th>Paid out</th><th>Closing</th><th>Ties</th></tr></thead>
+    <tbody>
+    {% for m in rc.months %}
+      <tr>
+        <td data-label="Month">{{ m.label }}{% if m.closed %} <span class="badge ok">closed</span>{% endif %}</td>
+        <td data-label="Opening" class="num">{{ m.opening|inr }}</td>
+        <td data-label="Collected" class="num"><a class="rpt-link" href="{{ p.url('/admin/reports/drill', flat='', drill={'cat': 'maintenance', 'measure': 'collected', 'month': ym_value(m.ym)}) }}">{{ m.collected|inr }}</a></td>
+        <td data-label="Paid out" class="num"><a class="rpt-link" href="{{ p.url('/admin/reports/drill', flat='', drill={'cat': 'settlements', 'measure': 'paidout', 'month': ym_value(m.ym)}) }}">{{ m.paid_out|inr }}</a></td>
+        <td data-label="Closing" class="num">{{ m.closing|inr }}</td>
+        <td data-label="Ties">{% if m.ok %}<span class="rpt-tick ok">✓</span>{% else %}<span class="rpt-tick warn">⚠ does not add up</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <div class="rpt-empty">No ledger month falls inside this period, so there is no balance to reconcile.</div>
+  {% endif %}
+  <div class="rpt-statement" style="margin-top:0.8rem">
+    <div><span>Account Balance now</span><strong>{{ rc.balance|inr }}</strong></div>
+    <div><span>− Owed to owners (not yet reimbursed)</span><strong>{{ rc.owed|inr }}</strong></div>
+    <div class="total"><span>= Balance after paying owners back</span><strong>{{ rc.effective|inr }}</strong></div>
+    <div><span>Corpus collected (held separately)</span><strong>{{ rc.corpus_held|inr }}</strong></div>
+    <div><span>Project money collected (held separately)</span><strong>{{ rc.projects_held|inr }}</strong></div>
+  </div>
+  {% for w in rc.warnings %}<p class="badge warn">{{ w }}</p>{% endfor %}
+  <details class="rpt-checks-list" {% if rc.bad %}open{% endif %}>
+    <summary>All {{ rc.checks|length }} cross-checks{% if rc.bad %} — {{ rc.bad|length }} do not tie{% endif %}</summary>
+    <div class="rpt-table-wrap"><table class="rpt-table">
+      <thead><tr><th>Check</th><th>Report</th><th>App</th><th>Result</th></tr></thead>
+      <tbody>
+      {% for c in rc.checks %}
+        <tr class="{{ '' if c.ok else 'rpt-bad' }}">
+          <td data-label="Check">{{ c.label }}{% if not c.ok %}<div class="muted">{{ c.hint }}</div>{% endif %}</td>
+          <td data-label="Report" class="num">{{ c.expected|inr }}</td>
+          <td data-label="App" class="num">{{ c.actual|inr }}</td>
+          <td data-label="Result">{% if c.ok %}<span class="rpt-tick ok">✓</span>{% else %}<span class="rpt-tick warn">⚠ differs</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </details>
+</section>
+
+{% elif p.kind == 'trend' %}
+{% set tr = d.trend %}
+<section class="card rpt-block">
+  <h3 style="margin-top:0">Month by month{% if p.cum %} <span class="muted">(running totals)</span>{% endif %}</h3>
+  <p class="muted">Green bars: everything collected (maintenance + corpus + projects). Orange bars: expenses. Line: Account Balance at the end of each month.</p>
+  {% if tr.rows %}
+  <div class="rpt-chart-wrap">{{ chart }}</div>
+  <div class="rpt-legend"><span class="in">■ Collected</span> <span class="out">■ Expenses</span> <span class="ln">● Account Balance</span></div>
+  <div class="rpt-table-wrap"><table class="rpt-table">
+    <thead><tr><th>Month</th>{% for k, lbl in tr.cols %}<th>{{ lbl }}</th>{% endfor %}<th>Opening</th><th>Closing</th></tr></thead>
+    <tbody>
+    {% for r in tr.rows %}
+      <tr>
+        <td data-label="Month">{{ r.label }}</td>
+        {% for k, lbl in tr.cols %}<td data-label="{{ lbl }}" class="num"><a class="rpt-link" href="{{ r.links[k] }}">{{ r.vals[k]|inr }}</a></td>{% endfor %}
+        <td data-label="Opening" class="num {{ 'empty' if r.opening is none }}">{% if r.opening is not none %}{{ r.opening|inr }}{% endif %}</td>
+        <td data-label="Closing" class="num {{ 'empty' if r.closing is none }}">{% if r.closing is not none %}{{ r.closing|inr }}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr class="rpt-total">
+      <td data-label="Month">{{ 'Latest running total' if p.cum else 'Total' }}</td>
+      {% for k, lbl in tr.cols %}<td data-label="{{ lbl }}" class="num bold">{% if p.cum %}{{ tr.totals[k]|inr }}{% else %}<a class="rpt-link" href="{{ tr.total_links[k] }}">{{ tr.totals[k]|inr }}</a>{% endif %}</td>{% endfor %}
+      <td class="num empty">{% if tr.rows[0].opening is not none %}{{ tr.rows[0].opening|inr }}{% endif %}</td><td class="num empty">{% if tr.rows[-1].closing is not none %}{{ tr.rows[-1].closing|inr }}{% endif %}</td>
+    </tr></tfoot>
+  </table></div>
+  {% else %}
+  <div class="rpt-empty"><strong>No months to show.</strong><br>Nothing has been recorded in this period. Try “All time” or another range.</div>
+  {% endif %}
+</section>
+
+{% else %}
+<section class="card rpt-block">
+  <h3 style="margin-top:0">{{ cats[p.cat] }} in detail</h3>
+  {{ tiles(d.detail_tiles) }}
+  {% for t in d.detail_tables %}
+  <h4>{{ t.title }}</h4>
+  {{ table(t) }}
+  {% endfor %}
+</section>
+{% endif %}
+
+<details class="card rpt-glossary">
+  <summary>What do these words mean?</summary>
+  <dl>{% for term, text in glossary.items() %}<dt>{{ term }}</dt><dd>{{ text }}</dd>{% endfor %}</dl>
+  <p class="muted">Months: maintenance uses its ledger month; expenses and settlements use the ledger month they belong to; corpus and project payments use the month they were paid. Shares and pending amounts are as of today. All times are IST.</p>
+</details>
+{% endblock %}

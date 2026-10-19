@@ -396,7 +396,7 @@ def expenses_page(
     if period:
         q = q.where(Expense.period_id == period.id)
     listed = db.scalars(
-        q.options(selectinload(Expense.paid_by_flat)).order_by(Expense.expense_date.desc())
+        q.options(selectinload(Expense.paid_by_flat), selectinload(Expense.settlement)).order_by(Expense.expense_date.desc())
     ).all()
     # Rejected expenses are out of every list; the admin gets one collapsed clean-up panel.
     counted_rows = [e for e in listed if not e.is_rejected]
@@ -704,6 +704,39 @@ def revert_settlement(request: Request, settlement_id: int, db: Session = Depend
     )
     db.commit()
     return RedirectResponse("/settlements", status_code=303)
+
+
+@router.post("/settlements/{settlement_id}/note")
+def edit_settlement_note(
+    request: Request,
+    settlement_id: int,
+    note: str = Form(""),
+    back: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Admin: change the free-text note on a settlement. Amounts, dates and balances are untouched."""
+    require_auth(request)
+    if not is_admin(request):
+        raise HTTPException(403)
+    st = db.get(Settlement, settlement_id)
+    if st is None or st.reverted_at is not None:
+        return _settlements_back(error="That settlement no longer exists.")
+    new_note = " ".join((note or "").split())[:255] or None
+    old_note = st.note
+    if new_note != old_note:
+        st.note = new_note
+        audit_svc.log_audit(
+            db,
+            entity_type="settlement",
+            entity_id=st.id,
+            action="edit_note",
+            before={"note": old_note, "expense_id": st.expense_id, "amount": st.amount},
+            after={"note": new_note, "expense_id": st.expense_id, "amount": st.amount},
+        )
+        db.commit()
+    target = back if back.startswith("/") and not back.startswith("//") else "/settlements"
+    sep = "&" if "?" in target else "?"
+    return RedirectResponse(f"{target}{sep}{urlencode({'msg': 'Settlement note saved.'})}", status_code=303)
 
 
 @router.get("/projects", response_class=HTMLResponse)

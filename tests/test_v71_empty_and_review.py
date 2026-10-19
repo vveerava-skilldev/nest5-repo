@@ -48,11 +48,14 @@ def strip_history(page: str) -> str:
     return re.sub(r'<details class="card dashboard-activity.*?</details>', "", page, flags=re.S)
 
 
-def run_scratch(tmp_path, code: str, *, prelude: str = "") -> str:
+def run_scratch(tmp_path, code: str, *, prelude: str = "", legacy: bool = True) -> str:
     """Run `code` against a brand-new seeded database (own files, never the shared test DB)."""
     env = {**os.environ, "DATABASE_URL": f"sqlite:///{tmp_path / 'scratch.db'}",
            "INSTANCE_DIR": str(tmp_path / "i"), "BACKUP_DIR": str(tmp_path / "b")}
-    seed = subprocess.run([sys.executable, "scripts/seed.py"], cwd=ROOT, env=env, capture_output=True, text=True)
+    if not legacy:
+        env.pop("SEED_SAMPLE_DATA", None)
+    seed_cmd = ["-c", "from tests.legacy_seed import seed_legacy; seed_legacy()"] if legacy else ["scripts/seed.py"]
+    seed = subprocess.run([sys.executable, *seed_cmd], cwd=ROOT, env=env, capture_output=True, text=True)
     assert seed.returncode == 0, seed.stderr
     head = (
         "import json\n"

@@ -2,8 +2,8 @@
 # Run from nest5-ledger/:  bash verify-install.sh
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
-echo "Install folder: $ROOT  (expected build label: nest5-v7.3)"
-if ! grep -q 'nest5-v7.3' app/config.py; then echo "  WRONG VERSION: app/config.py is not nest5-v7.3"; fi
+echo "Install folder: $ROOT  (expected build label: nest5-v7.4)"
+if ! grep -q 'nest5-v7.4' app/config.py; then echo "  WRONG VERSION: app/config.py is not nest5-v7.4"; fi
 echo ""
 FILES=(
   requirements.txt alembic.ini alembic/env.py
@@ -39,6 +39,8 @@ FILES=(
   app/templates/admin_payment_settings.html app/templates/admin_payment_history.html app/templates/_paid_to.html
   alembic/versions/b4e7c2a9d531_users_soft_delete.py app/services/payee_report.py app/routers/payee_report.py
   app/templates/admin_payee_report.html
+  app/services/reports.py app/routers/reports.py app/templates/admin_reports.html app/templates/_report_macros.html
+  tests/legacy_seed.py tests/test_v74_reports.py
 )
 OK=0
 for f in "${FILES[@]}"; do

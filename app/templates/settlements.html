@@ -53,7 +53,7 @@
 <div class="card">
   <h3 style="margin-top:0">Recent settlements</h3>
   <table>
-    <thead><tr><th>Date</th><th>Expense</th><th>Paid by</th><th>Settled from</th><th>Amount</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Expense</th><th>Paid by</th><th>Settled from</th><th>Amount</th><th>Note</th><th></th></tr></thead>
     <tbody>
     {% for s in settled_rows %}
       <tr>
@@ -62,6 +62,12 @@
         <td>{% if s.expense and s.expense.paid_by_flat %}Paid by Flat {{ s.expense.paid_by_flat.number }}{% else %}Account Balance{% endif %}</td>
         <td>{% if s.fund_type.value == 'maintenance' %}Account Balance{% else %}{{ s.fund_type.value|capitalize }}{% endif %}</td>
         <td>₹{{ s.amount }}</td>
+        <td class="settle-note-cell">
+          <form method="post" action="/settlements/{{ s.id }}/note" class="inline settle-note-form">
+            <input type="text" name="note" value="{{ s.note or '' }}" maxlength="255" placeholder="No note" aria-label="Settlement note">
+            <button type="submit" class="secondary">Save note</button>
+          </form>
+        </td>
         <td>
           <form method="post" action="/settlements/{{ s.id }}/revert" onsubmit="return confirm('Revert settlement?')">
             <button type="submit" class="secondary">Revert</button>

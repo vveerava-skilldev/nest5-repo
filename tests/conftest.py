@@ -8,6 +8,8 @@ _TMP = tempfile.mkdtemp(prefix="nest5-tests-")
 os.environ.setdefault("DATABASE_URL", f"sqlite:///{_TMP}/test.db")
 os.environ.setdefault("INSTANCE_DIR", os.path.join(_TMP, "instance"))
 os.environ.setdefault("BACKUP_DIR", os.path.join(_TMP, "backups"))
+# Subprocess tests that run scripts/seed.py get the demo months; legacy expenses come from tests/legacy_seed.py.
+os.environ["SEED_SAMPLE_DATA"] = "1"
 for _var in ("SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"):
     os.environ[_var] = ""
 
@@ -19,9 +21,9 @@ OWNER_PASSWORD = "owner-pass-123"
 def seeded_db():
     from app.database import SessionLocal
     from app.services import users as users_svc
-    from scripts.seed import seed
+    from tests.legacy_seed import seed_legacy
 
-    seed()
+    seed_legacy()
     db = SessionLocal()
     users_svc.ensure_bootstrap_users(db)
     db.commit()

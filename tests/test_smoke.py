@@ -1,11 +1,11 @@
 from fastapi.testclient import TestClient
 
 from app.database import SessionLocal, engine, Base
-from scripts.seed import seed
+from tests.legacy_seed import seed_legacy
 
 Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
-seed()
+seed_legacy()
 
 client = TestClient(__import__("app.main", fromlist=["app"]).app)
 

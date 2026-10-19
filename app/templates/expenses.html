@@ -96,7 +96,7 @@
         <td>₹{{ e.amount }}</td>
         <td>{% if e.paid_by_flat and not can_view_flat(request, e.paid_by_flat_id) %}Paid by an owner (advance){% elif e.paid_by_flat %}Paid by Flat {{ e.paid_by_flat.number }}{% else %}Account Balance{% endif %}
           {{ owner_marks(e, 'expense', cancel_pending, '/expenses' ~ ('?period_id=' ~ e.period_id if e.period_id else '')) }}</td>
-        <td>{% if e.is_settled %}<span class="badge ok">Yes</span>{% else %}<span class="badge warn">No</span>{% endif %}</td>
+        <td>{% if e.is_settled %}<span class="badge ok">Yes</span>{% if e.settlement and not e.settlement.reverted_at and e.settlement.note %}<div class="muted settle-note-text">{{ e.settlement.note }}</div>{% endif %}{% else %}<span class="badge warn">No</span>{% endif %}</td>
         <td class="no-print">
           {% if is_admin(request) %}
           {% set back = '/expenses' ~ ('?period_id=' ~ e.period_id if e.period_id else '') %}
@@ -137,6 +137,16 @@
                 <button type="button" class="secondary expense-edit-cancel">Cancel</button>
               </div>
             </form>
+            {% if e.is_settled and e.settlement and not e.settlement.reverted_at %}
+            <form method="post" action="/settlements/{{ e.settlement.id }}/note" class="inline settle-note-form" style="margin-top:0.5rem">
+              <input type="hidden" name="back" value="{{ back }}">
+              <label>Settlement note
+                <input type="text" name="note" value="{{ e.settlement.note or '' }}" maxlength="255" placeholder="No note">
+              </label>
+              <button type="submit" class="secondary">Save note</button>
+              <span class="muted">Only the note changes; amounts and balances stay as they are.</span>
+            </form>
+            {% endif %}
             <form method="post" action="/expenses/{{ e.id }}/delete" onsubmit="return confirm('Delete expense?')">
               <button type="submit" class="danger">Delete</button>
             </form>
