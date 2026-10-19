@@ -1,0 +1,26 @@
+{# expects `hub` and `limit` (rows per group; 0 = all) #}
+<div class="actions-hub">
+{% for g in hub.groups if g.count or not limit %}
+  <div class="actions-group {{ g.severity }}">
+    <div class="card-head">
+      <h4 style="margin:0"><a href="{{ g.link }}">{{ g.title }}</a> <span class="badge {{ 'bad' if g.severity == 'critical' and g.count else ('warn' if g.count else 'ok') }}">{{ g.count }}</span></h4>
+      {% if g.action == 'mark_reviewed' and not limit %}
+      <form method="post" action="/admin/actions/submissions-reviewed" class="inline no-print">
+        <button type="submit" class="secondary">Mark all reviewed</button>
+      </form>
+      {% endif %}
+    </div>
+    {% if g.action and g.action != 'mark_reviewed' %}<p class="actions-note">{{ g.action }}</p>{% endif %}
+    {% if g.rows %}
+    <ul class="actions-rows">
+      {% for r in (g.rows[:limit] if limit else g.rows) %}
+      <li><a href="{{ r.link }}">{{ r.text }}</a>{% if r.detail %} <span class="actions-detail">— {{ r.detail }}</span>{% endif %} <a href="{{ r.link }}" class="actions-cta no-print">{{ r.cta }} →</a></li>
+      {% endfor %}
+      {% if limit and g.count > limit %}<li><a href="/admin/actions">+ {{ g.count - limit }} more</a></li>{% endif %}
+    </ul>
+    {% else %}
+    <p class="actions-note">{{ g.empty }}</p>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>

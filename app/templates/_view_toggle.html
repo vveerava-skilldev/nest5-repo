@@ -1,0 +1,21 @@
+{% set _pq = ('&period_id=' ~ period.id) if period else '' %}
+{% set _view = owner_view.view %}
+<div class="sv-toggle no-print">
+  <div class="sv-seg" role="group" aria-label="Dashboard view">
+    <a href="/?view=simple{{ _pq }}"{% if _view == 'simple' %} class="on" aria-current="true"{% endif %}>Simple</a>
+    <a href="/?view=detailed{{ _pq }}"{% if _view == 'detailed' %} class="on" aria-current="true"{% endif %}>Detailed</a>
+  </div>
+  <form method="post" action="/account/dashboard-view" class="sv-default">
+    <input type="hidden" name="view" value="{{ _view }}">
+    {% if period %}<input type="hidden" name="period_id" value="{{ period.id }}">{% endif %}
+    <label><input type="checkbox" name="make_default" value="1"{% if owner_view.saved == _view %} checked{% endif %} onchange="this.form.submit()"> Set as my default</label>
+    <noscript><button type="submit" class="secondary">Save</button></noscript>
+  </form>
+</div>
+{% if owner_view.auto and _view == 'detailed' %}
+<script>
+if (window.matchMedia("(max-width: 600px)").matches) {
+  location.replace("/?view=simple" + (location.search ? "&" + location.search.slice(1) : ""));
+}
+</script>
+{% endif %}

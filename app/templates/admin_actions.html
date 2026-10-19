@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Actions — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Actions</h2>
+<p style="color:var(--muted)">Everything waiting for the admin, in one list. Each row links to the page where you resolve it.</p>
+{% include "_flash.html" %}
+<div class="grid">
+  <div class="card stat"><div class="label">Open items</div><div class="value">{{ hub.total }}</div></div>
+  <div class="card stat"><div class="label">Account Balance</div><div class="value">₹{{ hub.balances.held }}</div></div>
+  <div class="card stat"><div class="label">Owed back to owners</div><div class="value">₹{{ hub.balances.owed }}</div></div>
+  <div class="card stat"><div class="label">After settling</div><div class="value"{% if hub.balances.effective < 0 %} style="color:var(--bad)"{% endif %}>₹{{ hub.balances.effective }}</div></div>
+</div>
+<div class="card">
+  {% with limit = 0 %}{% include "_actions_list.html" %}{% endwith %}
+</div>
+{% endblock %}

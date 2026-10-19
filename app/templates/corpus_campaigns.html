@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Corpus — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Corpus</h2>
+<p style="color:var(--muted)">Each corpus is a goal with a category, a target, a share per flat and a due date, and may have line items under it. <strong>General corpus</strong> holds one-off amounts per flat. Flats pay in parts until their share is met.{% if not is_admin(request) %} Your own corpus payments: <a href="/payments/corpus">Payments › Corpus</a>.{% endif %}</p>
+{% include "_flash.html" %}
+<div class="grid">
+  <div class="card stat"><div class="label">Target (all goals)</div><div class="value">₹{{ building.target }}</div></div>
+  <div class="card stat"><div class="label">Collected</div><div class="value">₹{{ building.collected }}</div></div>
+  <div class="card stat"><div class="label">Pending (open goals)</div><div class="value">₹{{ building.pending }}</div></div>
+  <div class="card stat"><div class="label">Progress</div><div class="value"><div class="progress"><span style="width:{{ building.progress_pct }}%"></span></div> {{ building.progress_pct }}%</div></div>
+</div>
+
+{% include "_corpus_pay_form.html" %}
+
+<div class="card">
+  <div class="card-head">
+    <h3 style="margin:0">Goals</h3>
+    <form method="get" action="/corpus" class="inline no-print">
+      <label>Category
+        <select name="category" onchange="this.form.submit()">
+          <option value="">All</option>
+          {% for c in categories %}<option {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+      <noscript><button type="submit" class="secondary">Filter</button></noscript>
+    </form>
+  </div>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Goal</th><th>Category</th><th>Due date</th><th>Target</th><th>Collected</th><th>Remaining</th><th>Progress</th><th></th></tr></thead>
+    <tbody>
+    {% for s in summaries %}
+      {% set c = s.campaign %}
+      <tr>
+        <td><a href="/corpus/goals/{{ c.id }}"><strong>{{ c.name }}</strong></a>{% if c.closed_at %} <span class="badge">Closed</span>{% endif %}
+          {% if c.line_items %}<br><small style="color:var(--muted)">{{ c.line_items|length }} line item{{ 's' if c.line_items|length != 1 }}: {{ c.line_items|map(attribute='title')|join(', ') }}</small>{% endif %}</td>
+        <td>{{ c.category or 'General' }}</td>
+        <td>
+          {{ c.due_date|format_date }}
+          {% if not c.closed_at and s.remaining_total and c.due_date %}
+            {% if c.due_date < today %}<span class="badge bad">Overdue</span>
+            {% elif (c.due_date - today).days <= 7 %}<span class="badge warn">Due soon</span>{% endif %}
+          {% endif %}
+        </td>
+        <td>₹{{ c.target_amount }}</td>
+        <td>₹{{ s.paid_total }}</td>
+        <td>₹{{ s.remaining_total }}</td>
+        <td><div class="progress"><span style="width:{{ s.progress_pct }}%"></span></div> {{ s.progress_pct }}%</td>
+        <td><a href="/corpus/goals/{{ c.id }}">Payments →</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" style="color:var(--muted)">No corpus goals{% if category %} in {{ category }}{% endif %} yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% if is_admin(request) or flat_status|selectattr('totals.share')|list %}
+<div class="card">
+  <h3 style="margin-top:0">{% if is_admin(request) %}Per-flat status{% else %}Your flat{% if flat_status|length > 1 %}s{% endif %}{% endif %} — open goals</h3>
+  <table>
+    <thead><tr><th>Flat</th><th>Owner</th><th>Share</th><th>Paid</th><th>Remaining</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for f in flat_status %}
+      <tr class="reminder-{{ f.totals.status }}">
+        <td>{% if can_view_flat(request, f.flat.id) %}<a href="/flats/{{ f.flat.id }}">{{ f.flat.number }}</a>{% else %}{{ f.flat.number }}{% endif %}</td>
+        <td>{{ f.flat.contact_name or '—' }}</td>
+        <td>₹{{ f.totals.share }}</td>
+        <td>₹{{ f.totals.paid }}</td>
+        <td>₹{{ f.totals.remaining }}</td>
+        <td>
+          {% if f.totals.status == 'paid' %}<span class="badge ok">Paid</span>
+          {% elif f.totals.status == 'overdue' %}<span class="badge bad">Overdue</span>
+          {% elif f.totals.status == 'due_soon' %}<span class="badge warn">Due within 7 days</span>
+          {% else %}<span class="badge warn">Open</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if is_admin(request) %}
+<div class="card no-print">
+  <h3 style="margin-top:0">New corpus goal</h3>
+  <form method="post" action="/corpus/campaigns" class="expense-form">
+    <div class="expense-form-grid">
+      <label>Title<input name="name" required placeholder="e.g. Lift modernisation"></label>
+      <label>Category
+        <select name="category">{% for c in categories %}<option>{{ c }}</option>{% endfor %}</select>
+      </label>
+      <label>Total target (₹)<input name="target_amount" type="number" min="1" required class="campaign-target"></label>
+      <label>Due date<input name="due_date" type="date"></label>
+      <label>Description<input name="description" placeholder="Optional"></label>
+    </div>
+    <p style="margin:0.75rem 0 0.25rem;color:var(--muted)">Per-flat share (leave blank for an equal split of the target):</p>
+    <div class="expense-form-grid">
+      {% for f in flats %}
+      <label>Flat {{ f.number }}<input name="share_{{ f.id }}" type="number" min="0" class="campaign-share" placeholder="equal split"></label>
+      {% endfor %}
+    </div>
+    <label style="display:block;margin-top:0.75rem;color:var(--muted);font-size:0.85rem">Line items / sub-goals (optional, one per line, "Title: amount")
+      <textarea name="line_items" rows="3" style="width:100%" placeholder="Door sensors: 20000&#10;Cabin panels: 30000"></textarea>
+    </label>
+    <button type="submit" style="margin-top:0.5rem">Create goal</button>
+  </form>
+</div>
+<script>
+(function () {
+  const target = document.querySelector(".campaign-target");
+  const shares = document.querySelectorAll(".campaign-share");
+  if (!target) return;
+  target.addEventListener("input", () => {
+    const t = parseInt(target.value || "0", 10), n = shares.length;
+    const base = Math.floor(t / n), extra = t % n;
+    shares.forEach((s, i) => { s.placeholder = t ? String(base + (i < extra ? 1 : 0)) : "equal split"; });
+  });
+})();
+</script>
+
+<div class="card no-print">
+  <h3 style="margin-top:0">Add a one-off corpus amount (General corpus)</h3>
+  <form method="post" action="/corpus">
+    <div class="inline" style="flex-wrap:wrap;gap:0.5rem">
+      <select name="flat_id" required>{% for f in flats %}<option value="{{ f.id }}">Flat {{ f.number }}</option>{% endfor %}</select>
+      <input name="amount" type="number" min="1" required placeholder="Amount">
+      <input name="description" placeholder="Note (e.g. Corpus Oct)">
+      <button type="submit">Add to share</button>
+    </div>
+  </form>
+</div>
+
+<div class="card no-print">
+  <h3 style="margin-top:0">Categories</h3>
+  <p style="margin-top:0">{% for c in categories %}<span class="badge">{{ c }}</span> {% endfor %}</p>
+  <form method="post" action="/corpus/categories" class="inline">
+    <input name="name" placeholder="New category (e.g. Water tank)" required>
+    <button type="submit" class="secondary">Add category</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

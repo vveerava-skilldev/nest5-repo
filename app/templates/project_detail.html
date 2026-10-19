@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% from "_owner_marks.html" import owner_marks with context %}
+{% block title %}{{ project.name }} — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>{{ project.name }}</h2>
+<p>{{ project.description or '' }} · Total ₹{{ project.total_cost }} · Share ₹{{ project.share_per_flat }}/flat{% if project.due_date %} · Due {{ project.due_date|format_date }}{% endif %}</p>
+{% include "_flash.html" %}
+<div class="grid">
+  <div class="card stat"><div class="label">Collected</div><div class="value">₹{{ totals.collected }}</div></div>
+  <div class="card stat"><div class="label">Pending</div><div class="value">₹{{ totals.pending }}</div></div>
+  <div class="card stat"><div class="label">Flats paid</div><div class="value">{{ totals.paid_flats }} / {{ totals.flats }}{% if totals.part_flats %} <small>({{ totals.part_flats }} part)</small>{% endif %}</div></div>
+  <div class="card stat"><div class="label">Progress</div><div class="value"><div class="progress"><span style="width:{{ totals.progress_pct }}%"></span></div> {{ totals.progress_pct }}%</div></div>
+</div>
+{% if not is_admin(request) %}<h3>Your flat(s)</h3>{% endif %}
+<div class="card">
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Flat</th><th>Share</th><th>Paid</th><th>Remaining</th><th>Status</th><th>Note</th><th class="no-print"></th></tr></thead>
+    <tbody>
+    {% for pp in payments %}
+      <tr>
+        <td>{{ pp.flat.number }}</td>
+        <td>₹{{ pp.amount }}</td>
+        <td>₹{{ pp.paid }}</td>
+        <td>₹{{ pp.remaining }}</td>
+        <td>{% if pp.status == 'paid' %}<span class="badge ok">Paid</span>{% elif pp.status == 'part' %}<span class="badge warn">Part paid</span>{% else %}<span class="badge warn">Pending</span>{% endif %}</td>
+        <td>{{ pp.payment_note or '—' }}</td>
+        <td class="no-print">
+          {% if pp.remaining %}
+          <details class="inline-details">
+            <summary>{{ 'Mark paid' if is_admin(request) else 'Pay' }}</summary>
+            {% if is_admin(request) %}
+            <form method="post" action="/projects/payments/{{ pp.id }}/pay" class="inline">
+              <input type="date" name="paid_on" value="{{ today.isoformat() }}" required>
+              <input type="text" name="payment_note" placeholder="Note">
+              <button type="submit">Mark ₹{{ pp.remaining }} paid</button>
+            </form>
+            {% endif %}
+            <form method="post" action="/owner/projects/pay" class="inline">
+              <input type="hidden" name="share_id" value="{{ pp.id }}">
+              <input type="hidden" name="back" value="/projects/{{ project.id }}">
+              <input type="number" name="amount" min="1" max="{{ pp.remaining }}" value="{{ pp.remaining }}" required>
+              <input type="date" name="paid_on" value="{{ today.isoformat() }}" required>
+              <input type="text" name="payment_note" placeholder="Note">
+              <button type="submit" class="secondary">Record part payment</button>
+            </form>
+          </details>
+          {% endif %}
+          {% if is_admin(request) and pp.paid %}
+          <form method="post" action="/projects/payments/{{ pp.id }}/revert" class="inline" onsubmit="return confirm('Revert every payment on this share?')">
+            <button class="secondary">Revert</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" style="color:var(--muted)">No share for your flat(s) in this project.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% if contributions %}
+<div class="card">
+  <h3 style="margin-top:0">Payments</h3>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Date</th><th>Flat</th><th>Amount</th><th>Mode / note</th><th></th></tr></thead>
+    <tbody>
+    {% for c in contributions %}
+      <tr>
+        <td>{{ c.paid_on|format_date }}</td>
+        <td>{{ c.flat.number }}</td>
+        <td>₹{{ c.amount }}</td>
+        <td>{{ [c.payment_mode, c.payment_note]|select|join(' · ') or '—' }}</td>
+        <td>{{ owner_marks(c, 'project_contribution', cancel_pending, '/projects/' ~ project.id) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+{% if is_admin(request) %}
+<div class="card no-print">
+  <details>
+    <summary>Edit project</summary>
+    <form method="post" action="/projects/{{ project.id }}/edit" class="stack-form">
+      <label>Name <input name="name" value="{{ project.name }}" required></label>
+      <label>Description <input name="description" value="{{ project.description or '' }}"></label>
+      <label>Total cost ₹ <input name="total_cost" type="number" min="1" value="{{ project.total_cost }}" required></label>
+      <label>Start date <input type="date" name="start_date" value="{{ project.start_date.isoformat() if project.start_date else '' }}"></label>
+      <label>Due date <input type="date" name="due_date" value="{{ project.due_date.isoformat() if project.due_date else '' }}"></label>
+      <button type="submit">Save</button>
+    </form>
+    <p style="color:var(--muted)">Changing the total re-splits it equally; it is refused if a flat already paid more than the new share.</p>
+  </details>
+  <details>
+    <summary>Delete project</summary>
+    {% if payment_count %}
+    <p class="badge warn" style="white-space:normal">This project has {{ payment_count }} payment(s). Delete is blocked: revert each flat's payments above first.</p>
+    {% else %}
+    <form method="post" action="/projects/{{ project.id }}/delete" class="inline" onsubmit="return window.confirm('Delete this project?')">
+      <input name="confirm" placeholder="Type DELETE" required>
+      <button type="submit" class="danger">Delete project</button>
+    </form>
+    {% endif %}
+  </details>
+</div>
+{% endif %}
+<p><a href="/projects">← Back to projects</a></p>
+{% endblock %}

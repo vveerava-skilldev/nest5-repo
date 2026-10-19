@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ portal_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body{% if request.state.username is defined and not is_admin(request) %} data-owner="1"{% endif %}>
+{% if request.session.get('authenticated') and request.state.username is defined %}
+<div class="layout">
+  <nav class="sidebar{% if compact_nav %} compact{% endif %}">
+    <h1>{{ portal_name }}</h1>
+    {% set _path = request.url.path %}
+    {% macro nav_item(href, label, active) %}<li><a href="{{ href }}"{% if active %} class="active" aria-current="page"{% endif %}>{{ label }}</a></li>{% endmacro %}
+    <ul>
+      {% if is_admin(request) %}
+      {{ nav_item('/', 'Dashboard', _path == '/') }}
+      {{ nav_item('/payments/maintenance', 'Payments', _path.startswith('/payments') or _path.startswith('/maintenance')) }}
+      {{ nav_item('/expenses', 'Expenses', _path.startswith('/expenses')) }}
+      {{ nav_item('/corpus', 'Corpus', _path == '/corpus' or _path.startswith('/corpus/')) }}
+      {{ nav_item('/projects', 'Projects', _path.startswith('/projects')) }}
+      {{ nav_item('/schedule', 'Asset schedule', _path.startswith('/schedule') or _path.startswith('/assets')) }}
+      {{ nav_item('/calendar', 'Calendar', _path.startswith('/calendar')) }}
+      {{ nav_item('/complaints', 'Complaints', _path.startswith('/complaints')) }}
+      {{ nav_item('/flats', 'Flats', _path.startswith('/flats')) }}
+      <li class="nav-section">Admin</li>
+      {{ nav_item('/admin/actions', 'Actions', _path.startswith('/admin/actions')) }}
+      {{ nav_item('/settlements', 'Settlements', _path.startswith('/settlements')) }}
+      {{ nav_item('/audit', 'Audit log', _path.startswith('/audit')) }}
+      {{ nav_item('/periods/rollover', 'Month rollover', _path.startswith('/periods/rollover')) }}
+      {{ nav_item('/admin/maintenance-fee', 'Maintenance fee revision', _path.startswith('/admin/maintenance-fee')) }}
+      {{ nav_item('/admin/expense-categories', 'Expense categories', _path.startswith('/admin/expense-categories')) }}
+      {{ nav_item('/admin/users', 'Users', _path.startswith('/admin/users')) }}
+      {{ nav_item('/admin/cancel-requests', 'Cancel requests', _path.startswith('/admin/cancel-requests')) }}
+      {{ nav_item('/admin/export', 'Data export & backup', _path.startswith('/admin/export')) }}
+      {% elif is_tenant(request) %}
+      {{ nav_item('/payments/maintenance', 'Payments', _path.startswith('/payments') or _path.startswith('/maintenance') or _path.startswith('/corpus') or _path.startswith('/projects') or _path.startswith('/expenses')) }}
+      {{ nav_item('/owner/submissions', 'My submissions', _path.startswith('/owner/submissions')) }}
+      {% else %}
+      {{ nav_item('/', 'Dashboard', _path == '/') }}
+      {% for fid, fnum in request.state.user_flats|default([]) %}
+      {{ nav_item('/flats/' ~ fid, 'My flat ' ~ fnum, _path == '/flats/' ~ fid) }}
+      {% endfor %}
+      {{ nav_item('/payments/maintenance', 'Payments', _path.startswith('/payments') or _path.startswith('/maintenance') or _path.startswith('/corpus') or _path.startswith('/projects') or _path.startswith('/expenses')) }}
+      {{ nav_item('/complaints', 'Complaints', _path.startswith('/complaints')) }}
+      {{ nav_item('/schedule', 'Asset schedule', _path.startswith('/schedule') or _path.startswith('/assets')) }}
+      {{ nav_item('/calendar', 'Calendar', _path.startswith('/calendar')) }}
+      {{ nav_item('/owner/submissions', 'My submissions', _path.startswith('/owner/submissions')) }}
+      {% endif %}
+      <li class="nav-section">Account</li>
+      {{ nav_item('/account/password', 'Change password', _path.startswith('/account/password')) }}
+    </ul>
+    {% if request.state.username is defined %}
+    <p class="signed-in-as">Signed in as <strong>{{ request.state.username }}</strong> ({{ request.state.role|default('owner') }})</p>
+    {% endif %}
+    <form method="post" action="/logout" class="no-print" style="margin-top:1.5rem">
+      <button type="submit" class="secondary">Log out</button>
+    </form>
+    <p class="app-version">version: {{ app_version }}</p>
+  </nav>
+  <main>
+    {% if request.state.username is defined %}
+    <div class="session-bar no-print">Logged in as <strong>{{ request.state.username }}</strong> ({{ request.state.role|default('owner') }})</div>
+    {% set _switched = request.query_params.get('session_switched') %}
+    {% if _switched %}
+    <p class="session-switched">This page was opened as <strong>{{ _switched }}</strong>, but this browser is now logged in as <strong>{{ request.state.username }}</strong> (another tab or window logged in). Nothing was saved. Tabs and windows of one browser share one login — use a private window, another browser, or <code>localhost</code> vs <code>127.0.0.1</code> for a second user.</p>
+    {% endif %}
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% if request.state.username is defined %}
+<script>
+document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function (f) {
+  if (f.querySelector('input[name="_as_user"]')) return;
+  var i = document.createElement("input");
+  i.type = "hidden"; i.name = "_as_user"; i.value = {{ request.state.username|tojson }};
+  f.appendChild(i);
+});
+</script>
+{% endif %}
+<script src="/static/js/paynow.js" defer></script>
+{% else %}
+  {% block bare %}{% endblock %}
+{% endif %}
+</body>
+</html>

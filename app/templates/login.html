@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Login — {{ portal_name }}{% endblock %}
+{% block bare %}
+<div class="login-wrap">
+  <div class="card" style="width:min(360px,92vw)">
+    <h2 style="margin-top:0">{{ portal_name }}</h2>
+    <p style="color:var(--muted)">Sign in with your username and password. Leave username blank to sign in as <strong>admin</strong>.</p>
+    {% if notice %}<p class="badge ok">{{ notice }}</p>{% endif %}
+    {% if request.session.get('authenticated') and request.session.get('username') %}
+    <p class="session-switched">This browser is already logged in as <strong>{{ request.session.get('username') }}</strong>. Signing in here switches <em>every tab and window of this browser</em> to the new user. For two users at once, use a private window, another browser, or open one on <code>127.0.0.1:8000</code> and the other on <code>localhost:8000</code>.</p>
+    {% endif %}
+    {% if error %}<p class="badge bad">{{ error }}</p>{% endif %}
+    <form method="post" action="/login">
+      <label>Username<br><input type="text" name="username" value="{{ username or '' }}" placeholder="admin" autocomplete="username" autocapitalize="none" style="width:100%;margin-top:0.25rem"></label>
+      <label style="display:block;margin-top:0.75rem">Password<br><input type="password" name="password" required autocomplete="current-password" style="width:100%;margin-top:0.25rem"></label>
+      <button type="submit" style="width:100%;margin-top:1rem">Sign in</button>
+    </form>
+    <p style="margin-top:1rem"><a href="/forgot-password">Forgot password?</a></p>
+  </div>
+</div>
+{% endblock %}

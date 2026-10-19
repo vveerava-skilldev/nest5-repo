@@ -1,0 +1,4 @@
+{% set _ok = request.query_params.get('owner_msg') or request.query_params.get('msg') %}
+{% set _err = request.query_params.get('owner_error') or request.query_params.get('error') %}
+{% if _ok %}<p class="badge ok flash-msg">{{ _ok }}</p>{% endif %}
+{% if _err %}<p class="badge bad flash-msg">{{ _err }}</p>{% endif %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Maintenance fee — Admin{% endblock %}
+{% block content %}
+<h2>Maintenance fee (admin)</h2>
+<p style="color:var(--muted)">
+  A revision applies <strong>only from its effective month onward</strong>: earlier months never change,
+  paid rows are never touched, and months created later use the revision active for that month.
+</p>
+<div class="card no-print">
+  <h3 style="margin-top:0">Set / revise monthly fee</h3>
+  <form method="post" action="/admin/maintenance-fee">
+    <div class="inline" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-end">
+      <label>Effective from (mm-yyyy)
+        <input type="month" name="effective_date" id="fee-effective-month" value="{{ this_month }}"
+               placeholder="mm-yyyy" pattern="\d{4}-\d{2}|\d{2}-\d{4}" required>
+      </label>
+      <label>Amount (₹)
+        <input type="number" name="amount" min="1" value="{{ current_fee }}" required>
+      </label>
+      <label style="flex:1;min-width:12rem">Note (required)
+        <input type="text" name="note" required placeholder="Reason for change">
+      </label>
+      <button type="submit">Save revision</button>
+    </div>
+    <p id="fee-preview" class="fee-preview" style="color:var(--muted);margin:0.75rem 0 0" aria-live="polite"></p>
+  </form>
+</div>
+<div class="card">
+  <h3 style="margin-top:0">History</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Effective from</th>
+        <th>Old amount</th>
+        <th>New amount</th>
+        <th>Note</th>
+        <th>Recorded (when · who)</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in history %}
+      <tr>
+        <td>{{ row.effective_date|format_month }}</td>
+        <td>₹{{ previous[row.id] }}</td>
+        <td>₹{{ row.amount }}</td>
+        <td>{{ row.note }}</td>
+        <td>{{ row.created_at|format_datetime }} · {{ row.created_by }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" style="color:var(--muted)">No revisions yet — using default ₹{{ default_fee }} from config.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<script>
+(function () {
+  const input = document.getElementById("fee-effective-month");
+  const out = document.getElementById("fee-preview");
+  if (!input || !out) return;
+  async function refresh() {
+    if (!input.value) { out.textContent = ""; return; }
+    try {
+      const r = await fetch("/admin/maintenance-fee/preview?month=" + encodeURIComponent(input.value));
+      if (!r.ok) { out.textContent = "Enter the month as mm-yyyy."; return; }
+      const d = await r.json();
+      const list = d.affected.map((a) => a.month + " (" + a.unpaid + " flat" + (a.unpaid === 1 ? "" : "s") + ")");
+      out.textContent = "Applies from " + d.effective_month + ". " +
+        (list.length
+          ? "Unpaid months affected: " + list.join(", ") + ". "
+          : "No existing unpaid months affected; months created later will use this fee. ") +
+        "Earlier months unchanged; paid rows untouched.";
+    } catch (e) { out.textContent = ""; }
+  }
+  input.addEventListener("change", refresh);
+  input.addEventListener("input", refresh);
+  refresh();
+})();
+</script>
+{% endblock %}

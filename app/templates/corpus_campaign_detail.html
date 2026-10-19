@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% from "_owner_marks.html" import owner_marks with context %}
+{% block title %}{{ campaign.name }} — Corpus — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>{{ campaign.name }}{% if campaign.closed_at %} <span class="badge">Closed</span>{% endif %}</h2>
+<p class="no-print"><a href="/corpus">← Corpus</a> · <span class="badge">{{ campaign.category or 'General' }}</span></p>
+{% include "_flash.html" %}
+<div class="grid">
+  <div class="card stat"><div class="label">Target</div><div class="value">₹{{ campaign.target_amount }}</div></div>
+  <div class="card stat"><div class="label">Collected</div><div class="value">₹{{ summary.paid_total }}</div></div>
+  <div class="card stat"><div class="label">Remaining</div><div class="value">₹{{ summary.remaining_total }}</div></div>
+  <div class="card stat"><div class="label">Progress</div><div class="value"><div class="progress"><span style="width:{{ summary.progress_pct }}%"></span></div> {{ summary.progress_pct }}%</div></div>
+  <div class="card stat"><div class="label">Due date</div><div class="value">{% if campaign.due_date %}{{ campaign.due_date|format_date }}{% else %}—{% endif %}</div></div>
+</div>
+{% if campaign.description %}<p>{{ campaign.description }}</p>{% endif %}
+{% if summary.target_gap %}
+<p class="badge warn" style="white-space:normal">Per-flat shares add up to ₹{{ summary.share_total }}, which differs from the target by ₹{{ summary.target_gap }}.</p>
+{% endif %}
+
+{% if status_rows %}{% include "_corpus_pay_form.html" %}{% endif %}
+
+{% if line_items.rows or is_admin(request) %}
+<div class="card">
+  <h3 style="margin-top:0">Line items</h3>
+  {% if line_items.rows %}
+  <table>
+    <thead><tr><th>Line item</th><th>Target</th><th>Paid</th><th>Remaining</th><th>Progress</th>{% if is_admin(request) %}<th class="no-print"></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for li in line_items.rows %}
+      <tr>
+        <td>{{ li.item.title }}</td>
+        <td>{{ '₹' ~ li.target if li.target else '—' }}</td>
+        <td>₹{{ li.paid }}</td>
+        <td>{{ '₹' ~ li.remaining if li.remaining is not none else '—' }}</td>
+        <td>{% if li.progress_pct is not none %}<div class="progress"><span style="width:{{ li.progress_pct }}%"></span></div> {{ li.progress_pct }}%{% else %}—{% endif %}</td>
+        {% if is_admin(request) %}
+        <td class="no-print">
+          <form method="post" action="/corpus/goals/{{ campaign.id }}/line-items/{{ li.item.id }}/delete" class="inline" onsubmit="return confirm('Remove this line item? Its payments stay with the goal.')">
+            <button type="submit" class="secondary">Remove</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    {% if line_items.unassigned %}
+      <tr><td style="color:var(--muted)">Paid to the whole goal</td><td>—</td><td>₹{{ line_items.unassigned }}</td><td colspan="{{ 3 if is_admin(request) else 2 }}"></td></tr>
+    {% endif %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted)">No line items — payments count for the whole goal.</p>
+  {% endif %}
+  {% if is_admin(request) %}
+  <form method="post" action="/corpus/goals/{{ campaign.id }}/line-items" class="inline no-print" style="margin-top:0.5rem">
+    <input name="title" placeholder="Line item (e.g. Door sensors)" required>
+    <input name="target_amount" type="number" min="1" placeholder="Target ₹ (optional)">
+    <button type="submit" class="secondary">Add line item</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h3 style="margin-top:0">{% if is_admin(request) %}Per-flat status{% else %}Your flat{% if visible_rows|length > 1 %}s{% endif %}{% endif %}</h3>
+  <table>
+    <thead><tr><th>Flat</th><th>Owner</th><th>Share</th><th>Paid</th><th>Remaining</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for r in visible_rows %}
+      <tr class="reminder-{{ r.status }}">
+        <td>{{ r.flat.number }}</td>
+        <td>{{ r.flat.contact_name or '—' }}</td>
+        <td>₹{{ r.share }}</td>
+        <td>₹{{ r.paid }}</td>
+        <td>₹{{ r.remaining }}</td>
+        <td>
+          {% if r.status == 'paid' %}<span class="badge ok">Paid</span>
+          {% elif r.status == 'overdue' %}<span class="badge bad">Overdue</span>
+          {% elif r.status == 'due_soon' %}<span class="badge warn">Due within 7 days</span>
+          {% else %}<span class="badge warn">Open</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><td colspan="2"><strong>{% if is_admin(request) %}Total{% else %}Building total{% endif %}</strong></td><td><strong>₹{{ summary.share_total }}</strong></td><td><strong>₹{{ summary.paid_total }}</strong></td><td><strong>₹{{ summary.remaining_total }}</strong></td><td>{{ summary.progress_pct }}% collected</td></tr></tfoot>
+  </table>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">{% if is_admin(request) %}Payments{% else %}Your payments{% endif %}</h3>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Date</th><th>Flat</th><th>Line item</th><th>Amount</th><th>Mode</th><th>Note</th><th class="no-print"></th></tr></thead>
+    <tbody>
+    {% for p in payments %}
+      <tr>
+        <td>{{ p.paid_on|format_date }}</td>
+        <td>{{ p.flat.number }}</td>
+        <td>{{ p.line_item.title if p.line_item else '—' }}</td>
+        <td>₹{{ p.amount }}</td>
+        <td>{{ p.payment_mode or '—' }}</td>
+        <td>{{ p.payment_note or '—' }} {{ owner_marks(p, 'corpus_payment', cancel_pending, '/corpus/goals/' ~ campaign.id) }}</td>
+        <td class="no-print">
+          {% if is_admin(request) %}
+          <form method="post" action="/corpus/campaigns/{{ campaign.id }}/payments/{{ p.id }}/delete" class="inline" onsubmit="return confirm('Delete this payment?')">
+            <button type="submit" class="danger">Delete</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" style="color:var(--muted)">No payments yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% if is_admin(request) %}
+<div class="card no-print">
+  <details>
+    <summary><strong>Edit goal</strong></summary>
+    <form method="post" action="/corpus/campaigns/{{ campaign.id }}/update" class="expense-form" style="margin-top:0.5rem">
+      <div class="expense-form-grid">
+        <label>Title<input name="name" value="{{ campaign.name }}" required></label>
+        <label>Category
+          <select name="category">{% for c in categories %}<option {% if c == (campaign.category or 'General') %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+        </label>
+        {% if campaign.is_general %}
+        <label>Total target<input value="= sum of the flats' shares" disabled></label>
+        {% else %}
+        <label>Total target (₹)<input name="target_amount" type="number" min="1" value="{{ campaign.target_amount }}" required></label>
+        {% endif %}
+        <label>Due date<input name="due_date" type="date" value="{{ campaign.due_date|iso_date }}"></label>
+        <label>Description<input name="description" value="{{ campaign.description or '' }}"></label>
+      </div>
+      <div class="expense-form-grid" style="margin-top:0.5rem">
+        {% for r in summary.rows %}
+        <label>Flat {{ r.flat.number }} share<input name="share_{{ r.flat.id }}" type="number" min="0" value="{{ r.share }}"></label>
+        {% endfor %}
+        <label class="flat-checks"><span><input type="checkbox" name="closed" value="1" {% if campaign.closed_at %}checked{% endif %}> Closed</span></label>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </details>
+  {% set pay_count = campaign.payments|length %}
+  {% set pay_total = campaign.payments|sum(attribute='amount') %}
+  <details>
+    <summary><strong>Delete goal</strong></summary>
+    <form method="post" action="/corpus/goals/{{ campaign.id }}/delete" style="margin-top:0.5rem"
+          onsubmit="return window.confirm('Delete {{ campaign.name|e }}?{% if pay_count %} This also removes {{ pay_count }} payment(s) totalling ₹{{ pay_total }}.{% endif %} Its shares and line items are removed too. An automatic backup is taken first. This cannot be undone from the app.')">
+      {% if pay_count %}
+      <p class="badge warn" style="white-space:normal">This goal has {{ pay_count }} payment(s) totalling ₹{{ pay_total }}. Deleting it removes those payments from every total, flat page and export, and cannot be undone from the app (a database backup is taken first).</p>
+      <label class="flat-checks"><span><input type="checkbox" name="confirm_payments" value="yes" required> Yes, also remove {{ pay_count }} payment(s) (₹{{ pay_total }})</span></label>
+      {% else %}
+      <p style="color:var(--muted);margin:0 0 0.4rem">No payments recorded. The goal, its shares and line items are removed{% if campaign.is_general %}; General corpus is not recreated automatically{% endif %}.</p>
+      {% endif %}
+      <div class="inline">
+        <input name="confirm" placeholder="Type DELETE" required autocomplete="off">
+        <button type="submit" class="danger">Delete goal</button>
+      </div>
+    </form>
+  </details>
+</div>
+{% endif %}
+<p><a href="/corpus">← Corpus</a></p>
+{% endblock %}

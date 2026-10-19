@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% from "_owner_marks.html" import owner_marks with context %}
+{% block title %}Expenses — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Common expenses</h2>
+{% set base_path = '/expenses' %}
+{% include "_period_nav.html" %}
+<div class="grid">
+  <div class="card stat"><div class="label">Spent{% if period %} this month{% endif %}</div><div class="value">₹{{ totals.month_total }}</div></div>
+  <div class="card stat"><div class="label">Paid from Account Balance</div><div class="value">₹{{ totals.month_settled }}</div></div>
+  <div class="card stat"><div class="label">Owner advances to reimburse</div><div class="value">₹{{ totals.month_pending }}</div></div>
+  <div class="card stat"><div class="label">All months: spent · to reimburse</div><div class="value">₹{{ totals.all_total }} · ₹{{ totals.all_pending }}</div></div>
+</div>
+<p style="color:var(--muted)">Account Balance available for settlement: ₹{{ available }}</p>
+{% include "_flash.html" %}
+{% if not is_admin(request) and request.state.user_flats|default([]) %}
+<p class="no-print">Paid for a common expense yourself? Record it under <a href="/payments/expenses">Payments › My expenses</a>.</p>
+{% endif %}
+{% if is_admin(request) %}
+<div class="card no-print">
+  <h3 style="margin-top:0">Add expense</h3>
+  <form method="post" action="/expenses" class="expense-form">
+    <div class="inline expense-form-grid">
+      <label>Payment date
+        <input name="expense_date" type="date" required>
+      </label>
+      <label>Category
+        <select name="category" class="expense-category-select">
+          {% for c in expense_categories %}
+          <option value="{{ c }}">{{ c }}</option>
+          {% endfor %}
+          <option value="{{ add_category_value }}">Add category…</option>
+        </select>
+      </label>
+      <label class="category-other-wrap" hidden>New category
+        <input name="category_other" class="category-other-input" placeholder="Category name">
+      </label>
+      <label>Description
+        <input name="description" placeholder="Description" required>
+      </label>
+      <label>Amount
+        <input name="amount" type="number" min="1" placeholder="Amount" required>
+      </label>
+      <label>Paid by
+        <select name="paid_by_flat_id">
+          <option value="">— Account Balance (no owner advance) —</option>
+          {% for f in flats %}<option value="{{ f.id }}">Flat {{ f.number }} paid</option>{% endfor %}
+        </select>
+      </label>
+      {% if period %}<input type="hidden" name="period_id" value="{{ period.id }}">{% endif %}
+      <button type="submit">Save</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% if is_admin(request) and rejected_count %}
+<details class="card no-print rejected-panel">
+  <summary>Rejected expenses ({{ rejected_count }}) — not counted anywhere</summary>
+  <div class="table-scroll">
+  <table style="margin-top:0.5rem">
+    <thead><tr><th>Payment date</th><th>Description</th><th>Amount</th><th>Paid by</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for e in rejected_rows %}
+      <tr>
+        <td>{{ e.expense_date|format_date }}</td>
+        <td>{{ e.description }}{% if e.rejection_reason %}<br><small style="color:var(--muted)">Reason: {{ e.rejection_reason }}</small>{% endif %}</td>
+        <td>₹{{ e.amount }}</td>
+        <td>{% if e.paid_by_flat %}Flat {{ e.paid_by_flat.number }}{% else %}—{% endif %}</td>
+        <td>{% set back = '/expenses' ~ ('?period_id=' ~ period.id if period else '') %}{% include "_expense_review.html" %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <form method="post" action="/admin/expenses/clear-rejected" class="inline" onsubmit="return confirm('Delete all {{ rejected_count }} rejected expense(s) for good? The audit log keeps a record.')">
+    <input type="hidden" name="back" value="/expenses{% if period %}?period_id={{ period.id }}{% endif %}">
+    <button type="submit" class="danger">Clear all rejected ({{ rejected_count }})</button>
+  </form>
+</details>
+{% endif %}
+<div class="card">
+  <table>
+    <thead><tr><th>Payment date</th><th>Category</th><th>Description</th><th>Amount</th><th>Paid by</th><th>Settled</th><th class="no-print">Actions</th></tr></thead>
+    <tbody>
+    {% for e in expenses %}
+      <tr>
+        <td>{{ e.expense_date|format_date }}</td>
+        <td>{{ e.category }}</td>
+        <td>{{ e.description }}</td>
+        <td>₹{{ e.amount }}</td>
+        <td>{% if e.paid_by_flat and not can_view_flat(request, e.paid_by_flat_id) %}Paid by an owner (advance){% elif e.paid_by_flat %}Paid by Flat {{ e.paid_by_flat.number }}{% else %}Account Balance{% endif %}
+          {{ owner_marks(e, 'expense', cancel_pending, '/expenses' ~ ('?period_id=' ~ e.period_id if e.period_id else '')) }}</td>
+        <td>{% if e.is_settled %}<span class="badge ok">Yes</span>{% else %}<span class="badge warn">No</span>{% endif %}</td>
+        <td class="no-print">
+          {% if is_admin(request) %}
+          {% set back = '/expenses' ~ ('?period_id=' ~ e.period_id if e.period_id else '') %}
+          {% include "_expense_review.html" %}
+          {% if not e.is_rejected %}
+          <details class="expense-edit-details">
+            <summary>Edit</summary>
+            <form method="post" action="/expenses/{{ e.id }}/edit" class="expense-form" style="margin-top:0.5rem">
+              <div class="inline expense-form-grid">
+                <label>Payment date
+                  <input name="expense_date" type="date" value="{{ e.expense_date|iso_date }}" required>
+                </label>
+                <label>Category
+                  <select name="category" class="expense-category-select">
+                    {% if e.category not in expense_categories %}<option value="{{ e.category }}" selected>{{ e.category }} (not in the list)</option>{% endif %}
+                    {% for c in expense_categories %}
+                    <option value="{{ c }}" {% if e.category == c %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                    <option value="{{ add_category_value }}">Add category…</option>
+                  </select>
+                </label>
+                <label class="category-other-wrap" hidden>New category
+                  <input name="category_other" class="category-other-input" placeholder="Category name">
+                </label>
+                <label>Description
+                  <input name="description" value="{{ e.description }}" required>
+                </label>
+                <label>Amount
+                  <input name="amount" type="number" value="{{ e.amount }}" required>
+                </label>
+                <label>Paid by
+                  <select name="paid_by_flat_id">
+                    <option value="">Account Balance</option>
+                    {% for f in flats %}<option value="{{ f.id }}" {% if e.paid_by_flat_id == f.id %}selected{% endif %}>Flat {{ f.number }}</option>{% endfor %}
+                  </select>
+                </label>
+                <button type="submit">Update</button>
+                <button type="button" class="secondary expense-edit-cancel">Cancel</button>
+              </div>
+            </form>
+            <form method="post" action="/expenses/{{ e.id }}/delete" onsubmit="return confirm('Delete expense?')">
+              <button type="submit" class="danger">Delete</button>
+            </form>
+          </details>
+          {% endif %}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" style="color:var(--muted)">No expenses for this month.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<script>
+(function () {
+  const addVal = {{ add_category_value|tojson }};
+  function syncCategoryOther(select) {
+    const form = select.closest("form");
+    if (!form) return;
+    const wrap = form.querySelector(".category-other-wrap");
+    if (!wrap) return;
+    const show = select.value === addVal;
+    wrap.hidden = !show;
+    const input = wrap.querySelector("input");
+    if (input) input.required = show;
+  }
+  document.querySelectorAll(".expense-category-select").forEach((sel) => {
+    syncCategoryOther(sel);
+    sel.addEventListener("change", () => syncCategoryOther(sel));
+  });
+  document.querySelectorAll(".expense-edit-cancel").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const form = btn.closest("form");
+      if (form) {
+        form.reset();
+        form.querySelectorAll(".expense-category-select").forEach(syncCategoryOther);
+      }
+      const d = btn.closest("details");
+      if (d) d.removeAttribute("open");
+    });
+  });
+})();
+</script>
+{% endblock %}

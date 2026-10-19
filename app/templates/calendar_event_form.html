@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit event' if event else 'Add event' }} — {{ portal_name }}{% endblock %}
+{% block content %}
+{% set v = values %}
+<div class="cal">
+<p class="no-print"><a href="/calendar{% if event %}?m={{ event.event_date.strftime('%Y-%m') }}{% endif %}">← Back to calendar</a></p>
+<h2>{{ 'Edit event' if event else 'Add event' }}</h2>
+{% if error %}<p class="badge bad flash-msg">{{ error }}</p>{% endif %}
+<div class="card cal-form-card">
+  <form method="post" action="{{ '/calendar/events/' ~ event.id if event else '/calendar/events' }}" class="cal-form">
+    <label>Title
+      <input type="text" name="title" maxlength="200" required value="{{ v.get('title', event.title if event else '') }}" placeholder="e.g. Owners meeting">
+    </label>
+    <label>Type
+      {% set cur = v.get('event_type', event.event_type if event else 'Meeting') %}
+      <select name="event_type">{% for t in event_types %}<option{% if t == cur %} selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+    </label>
+    <div class="cal-form-row">
+      <label>Date
+        <input type="date" name="event_date" required value="{{ v.get('event_date', (event.event_date|iso_date) if event else default_date) }}">
+      </label>
+      <label>End date (optional)
+        <input type="date" name="end_date" value="{{ v.get('end_date', (event.end_date|iso_date) if event else '') }}">
+      </label>
+    </div>
+    <div class="cal-form-row">
+      <label>Start time (optional)
+        <input type="time" name="start_time" value="{{ v.get('start_time', (event.start_time or '') if event else '') }}">
+      </label>
+      <label>End time (optional)
+        <input type="time" name="end_time" value="{{ v.get('end_time', (event.end_time or '') if event else '') }}">
+      </label>
+    </div>
+    <label>Notes (optional)
+      <textarea name="notes" rows="4" placeholder="Agenda, venue, vendor name…">{{ v.get('notes', (event.notes or '') if event else '') }}</textarea>
+    </label>
+    <label class="cal-check">
+      {% set vis = v.get('visible_to_owners', event.visible_to_owners if event else True) %}
+      <input type="checkbox" name="visible_to_owners" value="1"{% if vis %} checked{% endif %}> Visible to owners
+    </label>
+    <div class="cal-form-actions">
+      <button type="submit">{{ 'Save changes' if event else 'Add event' }}</button>
+      <a href="/calendar" role="button" class="secondary-link">Cancel</a>
+    </div>
+  </form>
+  {% if event %}
+  <form method="post" action="/calendar/events/{{ event.id }}/delete" onsubmit="return confirm('Delete this event?')" class="cal-delete">
+    <button type="submit" class="danger">Delete event</button>
+  </form>
+  {% endif %}
+</div>
+</div>
+{% endblock %}

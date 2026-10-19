@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% from "_asset_macros.html" import task_rows, asset_fields, frequency_fields, status_badge with context %}
+{% block title %}Asset schedule — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Asset schedule</h2>
+<p style="color:var(--muted)">Building assets (lift, generator, water tank, motor/pump, …), their recurring checks and the maintenance log.{% if not is_admin(request) %} View only.{% endif %}</p>
+{% include "_flash.html" %}
+<div class="grid">
+  <div class="card stat"><div class="label">Overdue</div><div class="value" style="color:var(--bad)">{{ board.overdue|length }}</div></div>
+  <div class="card stat"><div class="label">Due this week</div><div class="value" style="color:var(--warn)">{{ board.this_week|length }}</div></div>
+  <div class="card stat"><div class="label">Upcoming ({{ board.upcoming_days }} days)</div><div class="value">{{ board.upcoming|length }}</div></div>
+  <div class="card stat"><div class="label">Assets</div><div class="value">{{ board.assets|length }}</div></div>
+</div>
+
+{% for section, items, badge in [
+  ('Overdue', board.overdue, 'bad'),
+  ('Due this week', board.this_week, 'warn'),
+  ('Upcoming', board.upcoming, 'ok')
+] %}
+{% if items %}
+<div class="card">
+  <h3 style="margin-top:0">{{ section }} <span class="badge {{ badge }}">{{ items|length }}</span></h3>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Asset</th><th>Task</th><th>Frequency</th><th>Last done</th><th>Next due</th><th>Status</th>{% if is_admin(request) %}<th class="no-print"></th>{% endif %}</tr></thead>
+    <tbody>
+      {{ task_rows(items, board.today, back, frequencies, True) }}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+{% if not board.overdue and not board.this_week and not board.upcoming %}
+<p class="card" style="color:var(--muted)">Nothing due in the next {{ board.upcoming_days }} days.</p>
+{% endif %}
+
+<h3>Assets</h3>
+{% for row in board.assets %}
+{% set a = row.asset %}
+<div class="card asset-card">
+  <div class="card-head">
+    <h3 style="margin:0"><a href="/assets/{{ a.id }}">{{ a.name }}</a> <span class="badge">{{ a.asset_type or 'Other' }}</span></h3>
+    <a href="/assets/{{ a.id }}" class="no-print">Details &amp; history →</a>
+  </div>
+  <p class="asset-meta">
+    {% if a.location %}<span>Location: {{ a.location }}</span>{% endif %}
+    {% if a.vendor_contact %}<span>Vendor / AMC: {{ a.vendor_contact }}</span>{% endif %}
+    {% if a.warranty_expiry %}<span>Warranty / AMC until {{ a.warranty_expiry|format_date }}{% if a.warranty_expiry < board.today %} <span class="badge bad">Expired</span>{% endif %}</span>{% endif %}
+  </p>
+  {% if row.tasks %}
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Task</th><th>Frequency</th><th>Last done</th><th>Next due</th><th>Status</th>{% if is_admin(request) %}<th class="no-print"></th>{% endif %}</tr></thead>
+    <tbody>{{ task_rows(row.tasks, board.today, back, frequencies) }}</tbody>
+  </table>
+  </div>
+  {% else %}
+  <p style="color:var(--muted)">No recurring tasks yet.</p>
+  {% endif %}
+  <p class="asset-meta">Last log entry:
+    {% if row.last_log %}{{ row.last_log.done_on|format_date }}{% if row.last_log.task %} — {{ row.last_log.task.task }}{% endif %}{% if row.last_log.done_by %} by {{ row.last_log.done_by }}{% endif %}{% if row.last_log.notes %} · {{ row.last_log.notes }}{% endif %}
+    {% else %}none yet{% endif %}
+  </p>
+</div>
+{% else %}
+<p class="card" style="color:var(--muted)">No assets yet.</p>
+{% endfor %}
+
+{% if is_admin(request) %}
+<div class="grid no-print">
+  <div class="card">
+    <h3 style="margin-top:0">Add asset</h3>
+    <form method="post" action="/assets" class="stack-form">
+      {{ asset_fields(asset_types) }}
+      <button type="submit">Add asset</button>
+    </form>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Add recurring task</h3>
+    <form method="post" action="/schedule" class="stack-form">
+      <input type="hidden" name="back" value="/schedule">
+      <label>Asset
+        <select name="asset_id" required>
+          {% for row in board.assets %}<option value="{{ row.asset.id }}">{{ row.asset.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Task <input name="task" placeholder="e.g. Fuel level check" required></label>
+      {{ frequency_fields(frequencies) }}
+      <label>Last done <input type="date" name="last_done_on"></label>
+      <label>Next due <input type="date" name="next_due_on" placeholder="Optional"></label>
+      <label>Vendor <input name="vendor" placeholder="Optional"></label>
+      <label>Notes <input name="notes" placeholder="Optional"></label>
+      <button type="submit">Add task</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% if is_admin(request) %}
+<div class="card no-print">
+  <details>
+    <summary><strong>Clear all asset tasks &amp; alerts</strong></summary>
+    <form method="post" action="/schedule/clear-all" style="margin-top:0.5rem" onsubmit="return window.confirm('Delete all {{ task_counts.tasks }} asset task(s) and {{ task_counts.logs }} task maintenance-log entr{{ 'y' if task_counts.logs == 1 else 'ies' }}? The assets stay. This removes every overdue / due alert from the dashboard, Actions and Calendar. An automatic backup is taken first.')">
+      <p style="color:var(--muted);margin:0 0 0.4rem">Deletes <strong>{{ task_counts.tasks }} task(s)</strong> and <strong>{{ task_counts.logs }} maintenance-log entr{{ 'y' if task_counts.logs == 1 else 'ies' }}</strong> that belong to tasks, so their overdue / due alerts disappear. The assets themselves and general log notes are kept. A database backup is taken first and the action is audit-logged.</p>
+      <div class="inline">
+        <input name="confirm" placeholder="Type CLEAR" required autocomplete="off">
+        <button type="submit" class="danger">Clear all asset tasks &amp; alerts</button>
+      </div>
+    </form>
+  </details>
+</div>
+{% endif %}
+{% endblock %}

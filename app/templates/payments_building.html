@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Payments · Building view — {{ portal_name }}{% endblock %}
+{% macro status_cell(cell, show_paid=False) %}
+  {% if not cell.has_items %}<span class="pay-na">—</span>
+  {% else %}
+    {% if cell.is_paid %}<span class="badge ok">Paid</span>
+    {% elif cell.paid %}<span class="badge warn">Part paid</span>
+    {% else %}<span class="badge warn">Pending</span>{% endif %}
+    <span class="pay-amt">{% if show_paid or (cell.paid and not cell.is_paid) %}₹{{ cell.paid }} / {% endif %}₹{{ cell.amount }}</span>
+  {% endif %}
+{% endmacro %}
+{% block content %}
+<h2>Payments — all flats</h2>
+<p class="no-print"><a href="/payments/maintenance">← My payments</a></p>
+{% include "_flash.html" %}
+<p style="color:var(--muted)">Read-only, building-wide payment status for the month: maintenance, corpus (all open goals) and project shares per flat.</p>
+{% set base_path = '/payments/building' %}
+{% include "_period_nav.html" %}
+
+{% if is_admin(request) %}
+<div class="card no-print">
+  <form method="post" action="/admin/settings/owner-building-view" class="inline">
+    <span>Owners can open this page: <strong>{{ 'On' if owners_can_view else 'Off' }}</strong></span>
+    <input type="hidden" name="enabled" value="{{ '0' if owners_can_view else '1' }}">
+    <button type="submit" class="secondary">Turn {{ 'off' if owners_can_view else 'on' }}</button>
+  </form>
+  <p style="color:var(--muted);margin-bottom:0">When off, the "View payments →" link is hidden for owners and this page refuses them.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Flat</th><th>Owner</th><th>Maintenance</th><th>Corpus</th>{% for proj in status.projects %}<th>{{ proj.name }}</th>{% endfor %}<th>Pending</th></tr></thead>
+    <tbody>
+    {% for row in status.rows %}
+      <tr>
+        <td>{{ row.flat.number }}</td>
+        <td>{{ row.flat.contact_name or '—' }}</td>
+        <td>{{ status_cell(row.maintenance) }}</td>
+        <td>{{ status_cell(row.corpus, True) }}</td>
+        {% for pc in row.projects %}<td>{{ status_cell(pc) }}</td>{% endfor %}
+        <td>₹{{ row.row_pending }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><th colspan="2">Building pending</th><th>₹{{ status.totals.maintenance_pending }}</th><th>₹{{ status.totals.corpus_pending }}</th>
+        {% for proj in status.projects %}<th>₹{{ status.totals.projects_pending.get(proj.id, 0) }}</th>{% endfor %}
+        <th>₹{{ status.totals.grand_pending }}</th></tr>
+    </tfoot>
+  </table>
+  </div>
+</div>
+{% endblock %}

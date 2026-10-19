@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_owner_marks.html" import owner_marks with context %}
+{% block title %}Payments · {% if is_admin(request) %}Owner expenses{% else %}My expenses{% endif %} — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Payments</h2>
+{% include "_payment_tabs.html" %}
+{% include "_flash.html" %}
+<p style="color:var(--muted)">{% if is_admin(request) %}Common expenses that owners paid themselves and recorded here. Reimburse them under <a href="/settlements">Settlements</a>.{% else %}Common expenses you paid yourself. They stay pending until the admin reimburses you.{% endif %} All building expenses: <a href="/expenses">Expenses overview</a>.</p>
+{% include "_owner_expense_form.html" %}
+{% if items or is_admin(request) %}
+<div class="card">
+  {% if items %}
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th>Category</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for e in items %}
+      <tr>
+        <td>{{ e.expense_date|format_date }}</td>
+        <td>{{ e.paid_by_flat.number if e.paid_by_flat else '—' }}</td>
+        <td>{{ e.description }}</td>
+        <td>{{ e.category }}</td>
+        <td>₹{{ e.amount }}</td>
+        <td>{% if e.is_settled %}<span class="badge ok">Reimbursed</span>{% else %}<span class="badge warn">Pending reimbursement</span>{% endif %}</td>
+        <td>{{ owner_marks(e, 'expense', cancel_pending, '/payments/expenses') }}
+          {% if not is_admin(request) and e.submitted_by_user_id == request.state.user_id and not e.is_settled and not cancel_pending.get(e.id) %}
+          {% set my_flats = request.state.user_flats %}
+          <details class="inline-details no-print owner-edit">
+            <summary>Edit</summary>
+            <form method="post" action="/owner/expenses/{{ e.id }}/edit" class="expense-form" style="margin-top:0.5rem">
+              <div class="expense-form-grid">
+                <label>Paid by
+                  <select name="flat_id">{% for fid, fnum in my_flats %}<option value="{{ fid }}" {% if fid == e.paid_by_flat_id %}selected{% endif %}>Flat {{ fnum }}</option>{% endfor %}</select>
+                </label>
+                <label>Payment date<input name="expense_date" type="date" value="{{ e.expense_date|iso_date }}" required></label>
+                <label>Category
+                  <select name="category">{% if e.category not in expense_categories %}<option value="{{ e.category }}" selected>{{ e.category }}</option>{% endif %}{% for c in expense_categories %}<option value="{{ c }}" {% if c == e.category %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+                </label>
+                <label>Description<input name="description" value="{{ e.description }}" required></label>
+                <label>Amount<input name="amount" type="number" min="1" value="{{ e.amount }}" required></label>
+                <button type="submit">Save changes</button>
+              </div>
+            </form>
+          </details>
+          {% endif %}
+          {% set back = '/payments/expenses' %}{% include "_expense_review.html" %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><th colspan="4">Total</th><th>₹{{ items|sum(attribute='amount') }}</th><th colspan="2">Pending ₹{{ items|rejectattr('is_settled')|sum(attribute='amount') }}</th></tr>
+    </tfoot>
+  </table>
+  </div>
+  {% else %}
+  <p style="color:var(--muted)">No owner-submitted expenses{% if not is_admin(request) %} for your flat(s){% endif %} yet.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
