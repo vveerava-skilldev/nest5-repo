@@ -1,0 +1,21 @@
+{% if alerts %}
+<div class="card alerts-panel">
+  <h3 style="margin-top:0">Alerts</h3>
+  <ul class="alert-list">
+    {% for a in alerts %}
+    <li class="alert-item severity-{{ a.severity }}">
+      <span class="alert-icon" aria-hidden="true">{{ a.icon }}</span>
+      <div class="alert-body">
+        <strong>{{ a.title }}</strong>
+        {% if a.count %}<span class="badge {% if a.severity == 'critical' %}bad{% elif a.severity == 'warning' %}warn{% else %}ok{% endif %}">{{ a.count }}</span>{% endif %}
+        <p>{{ a.detail }}</p>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% else %}
+<div class="card alerts-panel alerts-clear">
+  <span class="badge ok">✓</span> No urgent alerts for this month.
+</div>
+{% endif %}

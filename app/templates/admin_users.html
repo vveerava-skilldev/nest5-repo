@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Users — Admin{% endblock %}
+{% block content %}
+<h2>Users (admin)</h2>
+<p style="color:var(--muted)">
+  <strong>admin</strong> can do everything. <strong>owner</strong> accounts can view the ledger, their own flat page(s), raise complaints and change their own password. <strong>tenant</strong> accounts see only their own flat's pending payments, and only the payment sections ticked for them (Maintenance by default) — no dashboard, flat page, complaints or building views. Change the ticks any time.
+  New accounts and resets get a temporary password that must be changed at first login.
+</p>
+{% if message %}<p class="badge ok" style="white-space:normal">{{ message }}</p>{% endif %}
+{% if error %}<p class="badge bad" style="white-space:normal">{{ error }}</p>{% endif %}
+{% if temp_password %}
+<div class="card" style="border:2px solid var(--warn)">
+  <p style="margin:0">Temporary password for <strong>{{ temp_password[0] }}</strong>:
+    <code style="font-size:1.1rem;user-select:all">{{ temp_password[1] }}</code></p>
+  <p style="margin:0.25rem 0 0;color:var(--muted)">Shown once — copy it now and share it privately.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <table>
+    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Flats</th><th>Email</th><th>Status</th><th>Last login</th><th class="no-print">Actions</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td><strong>{{ u.username }}</strong></td>
+        <td>{{ u.display_name or '—' }}</td>
+        <td>{{ u.role }}{% if u.role == 'tenant' %}<br><small style="color:var(--muted)">sees: {% for s in tenant_sections_of(u) %}{{ tenant_labels[s] }}{% if not loop.last %}, {% endif %}{% endfor %}</small>{% endif %}</td>
+        <td>{% for f in u.flats %}{{ f.number }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}</td>
+        <td>{{ u.email or '—' }}</td>
+        <td>
+          {% if not u.is_active %}<span class="badge bad">Disabled</span>
+          {% elif u.must_change_password %}<span class="badge warn">Temp password</span>
+          {% else %}<span class="badge ok">Active</span>{% endif %}
+        </td>
+        <td>{{ u.last_login_at|format_datetime }}</td>
+        <td class="no-print">
+          <details>
+            <summary>Manage</summary>
+            <form method="post" action="/admin/users/{{ u.id }}/update" style="margin-top:0.5rem">
+              <div class="expense-form-grid">
+                <label>Name<br><input name="display_name" value="{{ u.display_name or '' }}"></label>
+                <label>Email<br><input name="email" type="email" value="{{ u.email or '' }}"></label>
+                <label>Role<br>
+                  <select name="role">{% for r in roles %}<option value="{{ r }}" {% if u.role == r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+                </label>
+                <fieldset class="flat-checks">Flats<br>
+                  {% for f in flats %}
+                  <label><input type="checkbox" name="flat_ids" value="{{ f.id }}" {% if f in u.flats %}checked{% endif %}> {{ f.number }}</label>
+                  {% endfor %}
+                </fieldset>
+                <fieldset class="flat-checks">Tenant sees (tenant role only)<br>
+                  {% set on = tenant_sections_of(u) %}
+                  {% for s in tenant_sections %}
+                  <label><input type="checkbox" name="tenant_payments" value="{{ s }}" {% if u.role == 'tenant' and s in on %}checked{% elif u.role != 'tenant' and s == 'maintenance' %}checked{% endif %}> {{ tenant_labels[s] }}</label>
+                  {% endfor %}
+                </fieldset>
+                <button type="submit">Save</button>
+              </div>
+            </form>
+            <div class="expense-form-grid" style="margin-top:0.5rem">
+              <form method="post" action="/admin/users/{{ u.id }}/reset-password" onsubmit="return confirm('Set a new temporary password for {{ u.username }}?')">
+                <button type="submit" class="secondary">Reset to temporary password</button>
+              </form>
+              <form method="post" action="/admin/users/{{ u.id }}/send-reset-link">
+                <button type="submit" class="secondary">Email reset link</button>
+              </form>
+              {% if u.is_active %}
+              <form method="post" action="/admin/users/{{ u.id }}/disable" onsubmit="return confirm('Disable {{ u.username }}?')">
+                <button type="submit" class="danger">Disable</button>
+              </form>
+              {% else %}
+              <form method="post" action="/admin/users/{{ u.id }}/enable">
+                <button type="submit">Enable</button>
+              </form>
+              {% endif %}
+            </div>
+            {% if u.id != current_user_id %}
+            <form method="post" action="/admin/users/{{ u.id }}/delete" class="user-delete" style="margin-top:0.75rem"
+                  onsubmit="return confirm('Permanently delete {{ u.username }}? This cannot be undone.')">
+              <label>Delete this user: type <strong>{{ u.username }}</strong> to confirm<br>
+                <input name="confirm_username" autocomplete="off" autocapitalize="none" placeholder="{{ u.username }}" required></label>
+              <button type="submit" class="danger">Delete user</button>
+              <small style="color:var(--muted);display:block">Soft delete: they cannot sign in and disappear from this list, but every record stays and you can restore them.</small>
+            </form>
+            {% endif %}
+          </details>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if deleted_users %}
+<details class="card no-print deleted-users">
+  <summary><strong>Deleted users ({{ deleted_users|length }})</strong></summary>
+  <p style="color:var(--muted)">Their payments, submissions and audit entries are kept, and their username stays reserved. Restore brings back the same account, role and flats on a new temporary password.</p>
+  <table>
+    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Flats</th><th>Deleted</th><th></th></tr></thead>
+    <tbody>
+    {% for u in deleted_users %}
+      <tr>
+        <td><strong>{{ u.username }}</strong></td><td>{{ u.display_name or '—' }}</td><td>{{ u.role }}</td>
+        <td>{% for f in u.flats %}{{ f.number }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}</td>
+        <td>{{ u.deleted_at|ist }} by {{ u.deleted_by or '—' }}</td>
+        <td><form method="post" action="/admin/users/{{ u.id }}/restore" onsubmit="return confirm('Restore {{ u.username }}?')"><button type="submit">Restore</button></form></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+
+<div class="card no-print">
+  <h3 style="margin-top:0">Create user</h3>
+  <form method="post" action="/admin/users">
+    <div class="expense-form-grid">
+      <label>Username<br><input name="username" required autocapitalize="none" placeholder="e.g. first.last"></label>
+      <label>Name<br><input name="display_name" placeholder="Full name"></label>
+      <label>Email<br><input name="email" type="email" placeholder="For password reset"></label>
+      <label>Role<br>
+        <select name="role">{% for r in roles %}<option value="{{ r }}" {% if r == 'owner' %}selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+      </label>
+      <fieldset class="flat-checks">Flats<br>
+        {% for f in flats %}
+        <label><input type="checkbox" name="flat_ids" value="{{ f.id }}"> {{ f.number }}</label>
+        {% endfor %}
+      </fieldset>
+      <fieldset class="flat-checks">Tenant sees (tenant role only)<br>
+        {% for s in tenant_sections %}
+        <label><input type="checkbox" name="tenant_payments" value="{{ s }}" {% if s == 'maintenance' %}checked{% endif %}> {{ tenant_labels[s] }}</label>
+        {% endfor %}
+      </fieldset>
+      <button type="submit">Create</button>
+    </div>
+  </form>
+</div>
+{% if not smtp_ready %}
+<p style="color:var(--muted)">Email (SMTP) is not configured: reset links are written to the server console and <code>instance/outbox.log</code>. See <code>.env.example</code>.</p>
+{% endif %}
+{% endblock %}

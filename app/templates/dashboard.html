@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Dashboard</h2>
+{% if owner_view %}{% include "_view_toggle.html" %}{% endif %}
+{% include "_flash.html" %}
+{% include "_reminders.html" %}
+{% set base_path = '/' %}
+{% include "_period_nav.html" %}
+{% set is_adm = is_admin(request) %}
+{% if not is_adm %}{% include "_alerts.html" %}{% endif %}
+{% set show_corpus = not empty_flags or empty_flags.goals %}
+{% set hide_expense_cards = empty_flags and not empty_flags.expenses %}
+<div class="grid">
+  <div class="card stat"><div class="label">Opening balance</div><div class="value">₹{{ summary.opening if summary else 0 }}</div></div>
+  <div class="card stat"><div class="label">Collections (maintenance)</div><div class="value">₹{{ collections }}</div></div>
+  {% if not hide_expense_cards %}<div class="card stat"><div class="label">Paid from Account Balance</div><div class="value">₹{{ expenses }}</div></div>{% endif %}
+  <div class="card stat"><div class="label">Closing balance</div><div class="value">₹{{ summary.closing if summary else fund_balance }}</div></div>
+</div>
+{% set bal = balances %}
+<div class="grid dashboard-fund-strip">
+  <div class="card stat compact-stat"><div class="label">Account Balance (money held)</div><div class="value">₹{{ bal.held }}</div><p class="settlement-hint">Collected − paid out, as of today.</p></div>
+  {% if not is_admin(request) or bal.count %}
+  <div class="card stat compact-stat"><div class="label">Unsettled owner expenses</div><div class="value">₹{{ bal.owed }}</div><p class="settlement-hint">{{ bal.count }} expense(s) owed back to owners.</p></div>
+  <div class="card stat compact-stat"><div class="label">Effective balance after settling</div><div class="value"{% if bal.effective < 0 %} style="color:var(--bad)"{% endif %}>₹{{ bal.effective }}</div><p class="settlement-hint">Account Balance − unsettled.</p></div>
+  <div class="card stat compact-stat settlement-inline">
+    <div class="label">Available to settle now</div>
+    <div class="value settlement-value">₹{{ bal.settle_now }}
+      {% if bal.state == 'all' %}<span class="badge ok">All</span>
+      {% elif bal.state == 'some' %}<span class="badge warn">Some</span>
+      {% elif bal.state == 'none' %}<span class="badge bad">None</span>
+      {% else %}<span class="badge">Nothing due</span>{% endif %}
+    </div>
+    <p class="settlement-hint">{{ settlement_note }}</p>
+  </div>
+  {% endif %}
+</div>
+
+{% set dh = action_board.due_headers %}
+{% macro due_note(h, label='') %}{% if h and h.due and is_admin(request) %}<small class="due-hint{{ ' overdue' if h.overdue }}">{{ label }}{{ 'overdue since' if h.overdue else 'due' }} {{ h.due|format_date }}</small>{% endif %}{% endmacro %}
+
+{% macro corpus_cell(cell) %}
+  {% if not cell.has_items %}
+    <span class="pay-na">—</span>
+  {% else %}
+    {% if cell.is_paid %}<span class="badge ok">Paid</span>
+    {% elif cell.status == 'overdue' %}<span class="badge bad">Overdue</span>
+    {% elif cell.paid %}<span class="badge warn">Part paid</span>
+    {% else %}<span class="badge warn">Pending</span>{% endif %}
+    <span class="pay-amt">₹{{ cell.paid }} / ₹{{ cell.amount }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro pay_cell(cell) %}
+  {% if not cell.has_items %}
+    <span class="pay-na">—</span>
+  {% else %}
+    {% if cell.is_paid %}
+      <span class="badge ok">Paid</span>
+    {% else %}
+      <span class="badge warn">Pending</span>
+    {% endif %}
+    <span class="pay-amt">₹{{ cell.amount }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% set board_html %}
+<section class="card dashboard-action">
+  <div class="dashboard-action-head">
+    <h3 style="margin:0">Action board{% if period %} — {{ period.year }}-{{ '%02d'|format(period.month) }}{% endif %}</h3>
+    <p class="dashboard-action-sub">
+      Maintenance for selected month{% if show_corpus %} · corpus across open collections (paid / share){% endif %}{% if action_board.projects %} · all active project shares{% endif %}.
+      Fixed fee ₹{{ maintenance_fee }}/flat.
+      <a href="/payments/maintenance{% if period %}?period_id={{ period.id }}{% endif %}">Maintenance</a>{% if show_corpus %} ·
+      <a href="/corpus">Corpus</a>{% endif %}{% if action_board.projects or not empty_flags %} ·
+      <a href="/projects">Projects</a>{% endif %}
+    </p>
+  </div>
+
+  <div class="dashboard-table-wrap">
+    <table class="dashboard-matrix">
+      <thead>
+        <tr>
+          <th class="col-flat">Flat / owner</th>
+          <th>Maintenance{{ due_note(dh.maintenance) }}</th>
+          {% if show_corpus %}<th>Corpus{% for g in dh.corpus %}{{ due_note(g, g.name ~ ': ') }}{% endfor %}</th>{% endif %}
+          {% for proj in action_board.projects %}
+          <th class="col-project" title="{{ proj.name }}">{{ proj.name }}{{ due_note(dh.projects.get(proj.id)) }}</th>
+          {% endfor %}
+          <th class="col-total">Pending</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in action_board.rows %}
+        <tr class="{% if row.row_pending %}row-needs-action{% endif %}">
+          <td class="col-flat">
+            {% if can_view_flat(request, row.flat.id) %}<a href="/flats/{{ row.flat.id }}" class="flat-num">{{ row.flat.number }}</a>{% else %}<span class="flat-num">{{ row.flat.number }}</span>{% endif %}
+            <span class="owner-name">{{ row.flat.contact_name or '—' }}</span>
+            {% if row.flat.owner_notes %}
+            <span class="owner-note">{{ row.flat.owner_notes }}</span>
+            {% endif %}
+          </td>
+          <td class="pay-cell">{{ pay_cell(row.maintenance) }}</td>
+          {% if show_corpus %}<td class="pay-cell">{{ corpus_cell(row.corpus) }}</td>{% endif %}
+          {% for pc in row.projects %}
+          <td class="pay-cell">
+            {% if pc.has_items %}
+              {% if pc.is_paid %}<span class="badge ok">Paid</span>{% elif pc.paid %}<span class="badge warn">Part paid</span>{% else %}<span class="badge warn">Pending</span>{% endif %}
+              <span class="pay-amt">{% if pc.paid and not pc.is_paid %}₹{{ pc.paid }} / {% endif %}₹{{ pc.amount }}</span>
+            {% else %}
+              <span class="pay-na">—</span>
+            {% endif %}
+          </td>
+          {% endfor %}
+          <td class="col-total">
+            {% if row.row_pending %}
+              <strong class="pending-total">₹{{ row.row_pending }}</strong>
+            {% else %}
+              <span class="pay-na">—</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="dashboard-totals">
+          <td><strong>Building pending</strong></td>
+          <td>
+            {% if action_board.totals.maintenance_pending %}
+              <strong>₹{{ action_board.totals.maintenance_pending }}</strong>
+            {% else %}<span class="pay-na">—</span>{% endif %}
+          </td>
+          {% if show_corpus %}<td>
+            {% if action_board.totals.corpus_pending %}
+              <strong>₹{{ action_board.totals.corpus_pending }}</strong>
+            {% else %}<span class="pay-na">—</span>{% endif %}
+          </td>{% endif %}
+          {% for proj in action_board.projects %}
+          <td>
+            {% set pp = action_board.totals.projects_pending.get(proj.id, 0) %}
+            {% if pp %}<strong>₹{{ pp }}</strong>{% else %}<span class="pay-na">—</span>{% endif %}
+          </td>
+          {% endfor %}
+          <td class="col-total">
+            <strong class="grand-pending">₹{{ action_board.totals.grand_pending }}</strong>
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  {% if is_adm and (dh.maintenance or dh.corpus or dh.projects) %}
+  <p class="due-strip" aria-label="Due dates">
+    {% if dh.maintenance %}<span>Maintenance {{ due_note(dh.maintenance) }}</span>{% endif %}
+    {% if show_corpus %}{% for g in dh.corpus %}<span>{{ g.name }} {{ due_note(g) }}</span>{% endfor %}{% endif %}
+    {% for proj in action_board.projects %}{% if dh.projects.get(proj.id) %}<span>{{ proj.name }} {{ due_note(dh.projects.get(proj.id)) }}</span>{% endif %}{% endfor %}
+  </p>
+  {% endif %}
+  <div class="dashboard-cards">
+    {% for row in action_board.rows %}
+    <article class="flat-card {% if row.row_pending %}row-needs-action{% endif %}">
+      <header>
+        {% if can_view_flat(request, row.flat.id) %}<a href="/flats/{{ row.flat.id }}">Flat {{ row.flat.number }}</a>{% else %}<span>Flat {{ row.flat.number }}</span>{% endif %}
+        <span>{{ row.flat.contact_name or '—' }}</span>
+        {% if row.flat.owner_notes %}<em>{{ row.flat.owner_notes }}</em>{% endif %}
+        {% if row.row_pending %}<strong class="pending-total">₹{{ row.row_pending }} pending</strong>{% endif %}
+      </header>
+      <dl>
+        <div><dt>Maintenance</dt><dd>{{ pay_cell(row.maintenance) }}</dd></div>
+        {% if show_corpus %}<div><dt>Corpus</dt><dd>{{ corpus_cell(row.corpus) }}</dd></div>{% endif %}
+        {% for pc in row.projects %}
+        {% if pc.has_items %}
+        <div><dt>{{ pc.project_name }}</dt><dd>
+          {% if pc.is_paid %}<span class="badge ok">Paid</span>{% elif pc.paid %}<span class="badge warn">Part paid</span>{% else %}<span class="badge warn">Pending</span>{% endif %}
+          <span class="pay-amt">{% if pc.paid and not pc.is_paid %}₹{{ pc.paid }} / {% endif %}₹{{ pc.amount }}</span>
+        </dd></div>
+        {% endif %}
+        {% endfor %}
+      </dl>
+    </article>
+    {% endfor %}
+    <article class="flat-card dashboard-totals-card">
+      <header><strong>Building pending totals</strong></header>
+      <dl>
+        <div><dt>Maintenance</dt><dd>₹{{ action_board.totals.maintenance_pending }}</dd></div>
+        {% if show_corpus %}<div><dt>Corpus</dt><dd>₹{{ action_board.totals.corpus_pending }}</dd></div>{% endif %}
+        {% for proj in action_board.projects %}
+        {% set pp = action_board.totals.projects_pending.get(proj.id, 0) %}
+        {% if pp %}
+        <div><dt>{{ proj.name }}</dt><dd>₹{{ pp }}</dd></div>
+        {% endif %}
+        {% endfor %}
+        <div><dt>Grand total</dt><dd><strong class="grand-pending">₹{{ action_board.totals.grand_pending }}</strong></dd></div>
+      </dl>
+    </article>
+  </div>
+</section>
+{% endset %}
+{% if is_adm %}
+{{ board_html }}
+{% include "_alerts.html" %}
+{% if hub and hub.total %}
+<section class="card dashboard-actions no-print">
+  <div class="card-head">
+    <h3 style="margin:0">Actions <span class="badge warn">{{ hub.total }}</span></h3>
+    <a href="/admin/actions">Open the full list →</a>
+  </div>
+  {% with limit = 3 %}{% include "_actions_list.html" %}{% endwith %}
+</section>
+{% endif %}
+{% if recent_activity %}
+<details class="card dashboard-activity no-print">
+  <summary><strong>Recent activity</strong> <span class="badge">{{ recent_activity|length }}</span> <small class="activity-hint">latest entries · tap to expand</small></summary>
+  {% include "_activity_list.html" %}
+  <p class="activity-all"><a href="/admin/activity">View all →</a></p>
+</details>
+{% endif %}
+{% else %}
+{% if my_advances %}
+{% include "_my_advances.html" %}
+{% endif %}
+{{ board_html }}
+{% endif %}
+
+{% if add_actions %}
+<p class="add-actions no-print"><span>Not set up yet:</span>{% for a in add_actions %} <a href="{{ a.href }}" class="add-action">+ {{ a.label }}</a>{% endfor %}</p>
+{% endif %}
+{% if period %}
+<p><a href="/statements/{{ period.id }}" target="_blank">Print monthly statement</a></p>
+{% endif %}
+{% endblock %}

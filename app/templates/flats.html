@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Flats — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Flats & owners</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>Flat</th><th>Owner</th><th>Notes</th><th>Contact</th><th></th></tr></thead>
+    <tbody>
+    {% for f in flats %}
+      <tr>
+        <td>{{ f.number }}</td>
+        <td>{{ f.contact_name or '—' }}</td>
+        <td>{{ f.owner_notes or '—' }}</td>
+        <td style="color:var(--muted)">{{ f.contact_phone or 'Filled later' }}</td>
+        <td><a href="/flats/{{ f.id }}">Ledger view →</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

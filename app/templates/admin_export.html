@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Data export &amp; backup — Admin{% endblock %}
+{% block content %}
+<h2>Data export &amp; backup (admin)</h2>
+{% if message %}<p class="badge ok" style="white-space:normal">{{ message }}</p>{% endif %}
+{% if error %}<p class="badge bad" style="white-space:normal">{{ error }}</p>{% endif %}
+
+{% if preview %}
+<div class="card" style="border:2px solid var(--bad)">
+  <h3 style="margin-top:0">Confirm restore</h3>
+  <p>File <strong>{{ preview.filename }}</strong>, exported {{ (preview.exported_at or '—')|display_dates }} (schema {{ preview.schema_version or '—' }}; this database: {{ preview.current_schema or '—' }}).</p>
+  <p><strong>This replaces the current data</strong> in every table included in the dump. Tables not in the dump are left as they are. A backup of the current database is taken automatically first.</p>
+  <table>
+    <thead><tr><th>Table</th><th>Rows now</th><th>Rows after restore</th></tr></thead>
+    <tbody>
+    {% for name, now, after in preview.rows %}
+      <tr><td>{{ name }}</td><td>{{ now }}</td><td>{{ after if after is not none else 'unchanged' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/admin/export/restore/confirm" class="inline" style="margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem">
+    <input type="hidden" name="token" value="{{ preview.token }}">
+    <label>Type <code>{{ confirm_word }}</code> to confirm <input name="confirm_text" autocomplete="off" required></label>
+    <button type="submit" class="danger">Restore now</button>
+    <a href="/admin/export">Cancel</a>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3 style="margin-top:0">Downloads</h3>
+  <ul>
+    <li><a href="/admin/export/excel">Excel workbook (.xlsx)</a> — one sheet per table, readable headers, dates dd-mm-yyyy.</li>
+    <li><a href="/admin/export/csv">CSV zip</a> — one CSV per table, ISO dates, for another database or an insights tool.</li>
+    <li><a href="/admin/export/json">JSON full dump</a> — every table and row incl. audit log, with schema version. Use this for restore.</li>
+    {% if is_sqlite %}<li><a href="/admin/export/sqlite">Raw SQLite backup (.db)</a> — exact copy of the database file.</li>{% endif %}
+  </ul>
+  <form method="get" action="/admin/export/pdf" class="inline" style="flex-wrap:wrap;gap:0.5rem">
+    <label>PDF summary report
+      <select name="period_id">
+        <option value="all">All time</option>
+        {% for pid, label in periods %}<option value="{{ pid }}">{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit">Download PDF</button>
+  </form>
+  <p style="color:var(--muted);margin-bottom:0">Excel and CSV leave out password hashes; the JSON dump keeps them so logins survive a restore — store it safely.</p>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Automatic backups</h3>
+  <p style="color:var(--muted)">The database is copied to <code>backups/nest5-YYYYMMDD-HHMMSS.db</code> (file names carry India time, IST) every time the app starts (newest 30 kept) and before every restore.</p>
+  {% if backups %}
+  <table>
+    <thead><tr><th>File</th><th>Size</th><th>Saved</th></tr></thead>
+    <tbody>
+    {% for name, size, when in backups %}
+      <tr><td><code>{{ name }}</code></td><td>{{ (size / 1024)|round(1) }} KB</td><td>{{ when|format_datetime }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No backups yet.</p>
+  {% endif %}
+  <form method="post" action="/admin/export/backup-now" style="margin-top:0.75rem">
+    <button type="submit" class="secondary">Back up now</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Restore from JSON dump</h3>
+  <form method="post" action="/admin/export/restore" enctype="multipart/form-data" class="inline" style="flex-wrap:wrap;gap:0.5rem">
+    <input type="file" name="dump" accept=".json,application/json" required>
+    <button type="submit">Upload &amp; preview</button>
+  </form>
+  <p style="color:var(--muted);margin-bottom:0">You will see a row-count preview and must confirm before anything changes.</p>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Current row counts</h3>
+  <table>
+    <thead><tr><th>Table</th><th>Rows</th></tr></thead>
+    <tbody>{% for name, n in counts.items() %}<tr><td>{{ name }}</td><td>{{ n }}</td></tr>{% endfor %}</tbody>
+  </table>
+</div>
+{% endblock %}

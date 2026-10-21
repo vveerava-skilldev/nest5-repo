@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Payment settings history — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Payment settings history</h2>
+<p style="color:var(--muted)">Newest first. Every change is kept permanently with the balances the app computed at that moment; entries cannot be edited or deleted.</p>
+{% include "_flash.html" %}
+<p><a href="/admin/payment-settings">← Payment settings</a></p>
+<div class="pay-history">
+  {% for r in rows %}
+  <article class="card pay-hist-row" id="change-{{ r.id }}">
+    <header class="card-head">
+      <strong>{{ r.changed_at|ist }}</strong>
+      <span>{% if r.is_initial %}<span class="badge ok">Initial</span>{% endif %} <small>#{{ r.id }} · by {{ r.changed_by }}</small></span>
+    </header>
+    {% if r.is_initial %}
+    <dl class="pay-current">
+      <dt>UPI ID</dt><dd>{{ r.new_upi_vpa }}</dd>
+      <dt>Mobile number</dt><dd>{{ r.new_upi_mobile }}</dd>
+      <dt>Payee name</dt><dd>{{ r.new_payee_name }}</dd>
+    </dl>
+    {% else %}
+    <ul class="pay-diff">
+      {% if r.old_upi_vpa != r.new_upi_vpa %}<li><strong>UPI ID</strong><span class="old">{{ r.old_upi_vpa }}</span> → <span class="new">{{ r.new_upi_vpa }}</span></li>{% endif %}
+      {% if r.old_upi_mobile != r.new_upi_mobile %}<li><strong>Mobile</strong><span class="old">{{ r.old_upi_mobile }}</span> → <span class="new">{{ r.new_upi_mobile }}</span></li>{% endif %}
+      {% if r.old_payee_name != r.new_payee_name %}<li><strong>Payee</strong><span class="old">{{ r.old_payee_name }}</span> → <span class="new">{{ r.new_payee_name }}</span></li>{% endif %}
+    </ul>
+    {% endif %}
+    <p class="pay-reason"><strong>Reason:</strong> {{ r.reason }}</p>
+    <p class="pay-bal">Balances then: Account Balance <strong>₹{{ r.fund_balance if r.fund_balance is not none else '—' }}</strong>
+      · Corpus collected ₹{{ r.corpus_collected if r.corpus_collected is not none else '—' }}
+      · Projects collected ₹{{ r.projects_collected if r.projects_collected is not none else '—' }}
+      · Total ₹{{ r.total_balance if r.total_balance is not none else '—' }}
+      {% if r.owed_back %}· Owed back to owners ₹{{ r.owed_back }}{% endif %}
+      {% if r.bank_balance_entered %}<br>Actual bank balance entered: <strong>{{ r.bank_balance_entered }}</strong>{% endif %}</p>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

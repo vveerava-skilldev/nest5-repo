@@ -1,0 +1,26 @@
+{% if not is_admin(request) and request.state.user_flats|default([]) %}
+{% set my_flats = request.state.user_flats %}
+<div class="card no-print owner-form">
+  <h3 style="margin-top:0">Record a common expense I paid</h3>
+  <p style="color:var(--muted);margin-top:0">It is recorded as your advance (unsettled) and appears in pending settlements until the admin reimburses you.</p>
+  <form method="post" action="/owner/expenses" class="expense-form">
+    <div class="expense-form-grid">
+      {% if my_flats|length > 1 %}
+      <label>Paid by
+        <select name="flat_id">{% for fid, fnum in my_flats %}<option value="{{ fid }}">Flat {{ fnum }}</option>{% endfor %}</select>
+      </label>
+      {% else %}
+      <input type="hidden" name="flat_id" value="{{ my_flats[0][0] }}">
+      <label>Paid by<input value="Flat {{ my_flats[0][1] }}" disabled></label>
+      {% endif %}
+      <label>Payment date<input name="expense_date" type="date" value="{{ today|iso_date }}" required></label>
+      <label>Category
+        <select name="category">{% for c in expense_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select>
+      </label>
+      <label>Description<input name="description" placeholder="Description" required></label>
+      <label>Amount<input name="amount" type="number" min="1" placeholder="Amount" required></label>
+      <button type="submit">Submit expense</button>
+    </div>
+  </form>
+</div>
+{% endif %}

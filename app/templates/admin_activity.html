@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Activity — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Activity</h2>
+<p style="color:var(--muted)">What happened in the portal, newest first. Built from the audit log; the technical entries are under <a href="/audit">Audit log</a>.</p>
+{% include "_flash.html" %}
+{% macro qs(r=role, rg=range, df=date_from, dt=date_to, p=1) -%}
+?role={{ r }}{% if rg %}&range={{ rg }}{% endif %}{% if df %}&date_from={{ df }}{% endif %}{% if dt %}&date_to={{ dt }}{% endif %}{% if p > 1 %}&page={{ p }}{% endif %}
+{%- endmacro %}
+<div class="card activity-filters no-print">
+  <div class="chips" role="group" aria-label="Who">
+    {% for key, label in (('all', 'All'), ('owners', 'Owners'), ('admin', 'Admin'), ('tenants', 'Tenants')) %}
+    <a class="chip {% if role == key %}active{% endif %}" href="/admin/activity{{ qs(r=key) }}"{% if role == key %} aria-current="true"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </div>
+  <div class="chips" role="group" aria-label="When">
+    <a class="chip {% if not range and not date_from and not date_to %}active{% endif %}" href="/admin/activity{{ qs(rg='', df='', dt='') }}">Any time</a>
+    <a class="chip {% if range == '7' %}active{% endif %}" href="/admin/activity{{ qs(rg='7', df='', dt='') }}">Last 7 days</a>
+    <a class="chip {% if range == '30' %}active{% endif %}" href="/admin/activity{{ qs(rg='30', df='', dt='') }}">Last 30 days</a>
+  </div>
+  <form method="get" action="/admin/activity" class="inline activity-range">
+    <input type="hidden" name="role" value="{{ role }}">
+    <label>From <input type="date" name="date_from" value="{{ date_from }}"></label>
+    <label>To <input type="date" name="date_to" value="{{ date_to }}"></label>
+    <button type="submit" class="secondary">Apply</button>
+  </form>
+</div>
+<div class="card">
+  {% if feed['items'] %}
+  <p class="activity-count">{{ feed['total'] }} entr{{ 'y' if feed['total'] == 1 else 'ies' }}</p>
+  <ul class="activity-list">
+  {% for a in feed['items'] %}
+    <li class="activity-item">
+      <span class="activity-badge {{ a.role }}">{{ a.badge }}</span>
+      <div class="activity-body">
+        <div class="activity-text">{{ a.sentence }}</div>
+        <div class="activity-meta">{{ a.when|format_datetime }}</div>
+      </div>
+    </li>
+  {% endfor %}
+  </ul>
+  <div class="activity-pager no-print">
+    {% if page > 1 %}<a class="chip" href="/admin/activity{{ qs(p=page - 1) }}">← Newer</a>{% endif %}
+    <span class="activity-count">Page {{ page }}</span>
+    {% if feed['has_more'] %}<a class="chip" href="/admin/activity{{ qs(p=page + 1) }}">Load more (older) →</a>{% endif %}
+  </div>
+  {% else %}
+  <p class="activity-empty">No activity{% if role != 'all' or range or date_from or date_to %} for this filter{% endif %} yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

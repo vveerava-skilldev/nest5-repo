@@ -1,0 +1,22 @@
+{# Admin controls for one owner-submitted expense. Expects `e` and `back`. #}
+{% if is_admin(request) %}
+  {% if e.is_rejected %}
+  <form method="post" action="/admin/expenses/{{ e.id }}/reinstate" class="inline no-print">
+    <input type="hidden" name="back" value="{{ back }}">
+    <button type="submit" class="secondary">Reinstate</button>
+  </form>
+  <form method="post" action="/admin/expenses/{{ e.id }}/purge" class="inline no-print" onsubmit="return confirm('Delete this rejected expense for good? It is removed from the list; the audit log keeps a record.')">
+    <input type="hidden" name="back" value="{{ back }}">
+    <button type="submit" class="danger">Delete</button>
+  </form>
+  {% elif e.submitted_by_user_id and not e.is_settled %}
+  <details class="inline-details no-print">
+    <summary>Reject</summary>
+    <form method="post" action="/admin/expenses/{{ e.id }}/reject" class="inline" onsubmit="return confirm('Reject this expense? It will stop counting in settlements, balances and totals, but stays listed as Rejected.')">
+      <input type="hidden" name="back" value="{{ back }}">
+      <input type="text" name="reason" maxlength="255" placeholder="Reason (optional)">
+      <button type="submit" class="danger">Reject expense</button>
+    </form>
+  </details>
+  {% endif %}
+{% endif %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Payment settings — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Payment settings</h2>
+<p style="color:var(--muted)">The UPI ID, mobile number and payee name shown on the owners' Pay now sheet. A change applies only to Pay now sheets opened afterwards; every payment already recorded keeps the payee it was made to.</p>
+{% include "_flash.html" %}
+{% for e in errors %}<p class="badge bad flash-msg">{{ e }}</p>{% endfor %}
+
+<div class="card">
+  <h3 style="margin-top:0">Current details</h3>
+  <dl class="pay-current">
+    <dt>UPI ID</dt><dd>{{ current.vpa }}</dd>
+    <dt>Mobile number</dt><dd>{{ current.mobile }}</dd>
+    <dt>Payee name</dt><dd>{{ current.payee }}</dd>
+  </dl>
+  <p><a href="/admin/payment-settings/history">View change history →</a></p>
+</div>
+
+{% if preview %}
+<div class="card" id="confirm-step">
+  <h3 style="margin-top:0">Confirm this change</h3>
+  <ul class="pay-diff">
+    {% for c in preview.changes %}<li><strong>{{ c.label }}</strong><span class="old">{{ c.old }}</span> <span aria-hidden="true">→</span> <span class="new">{{ c.new }}</span></li>{% endfor %}
+  </ul>
+  <p><strong>Reason:</strong> {{ preview.clean.reason }}</p>
+  <p style="color:var(--muted)">Balances saved with this change (computed by the app now): Account Balance ₹{{ preview.balances.fund_balance }} · Corpus collected ₹{{ preview.balances.corpus_collected }} · Projects collected ₹{{ preview.balances.projects_collected }} · Total ₹{{ preview.balances.total_balance }}{% if preview.clean.bank_balance %} · Actual bank balance you entered: {{ preview.clean.bank_balance }}{% endif %}</p>
+  <form method="post" action="/admin/payment-settings/confirm" class="pay-settings-form">
+    <input type="hidden" name="upi_vpa" value="{{ preview.clean.vpa }}">
+    <input type="hidden" name="upi_mobile" value="{{ preview.clean.mobile }}">
+    <input type="hidden" name="payee_name" value="{{ preview.clean.payee }}">
+    <input type="hidden" name="reason" value="{{ preview.clean.reason }}">
+    <input type="hidden" name="bank_balance" value="{{ preview.clean.bank_balance or '' }}">
+    <input type="hidden" name="confirm" value="yes">
+    <button type="submit">Confirm and save</button>
+    <a href="#edit" class="secondary-link">Go back and edit</a>
+  </form>
+</div>
+{% endif %}
+
+<div class="card no-print" id="edit">
+  <h3 style="margin-top:0">Change details</h3>
+  <form method="post" action="/admin/payment-settings/review" class="pay-settings-form">
+    <label>UPI ID<input name="upi_vpa" value="{{ form.vpa }}" maxlength="120" required autocapitalize="none" autocomplete="off" placeholder="name@bank"></label>
+    <label>Mobile number<input name="upi_mobile" value="{{ form.mobile }}" maxlength="20" inputmode="tel" required autocomplete="off"></label>
+    <label>Payee name<input name="payee_name" value="{{ form.payee }}" maxlength="100" required></label>
+    <label>Reason for the change (required)<input name="reason" value="{{ form.reason }}" maxlength="255" required placeholder="e.g. Association account changed to SBI"></label>
+    <label>Actual bank / UPI balance now, ₹ (optional)<input name="bank_balance" value="{{ form.bank }}" maxlength="60" inputmode="decimal" autocomplete="off" placeholder="as shown in your bank app"></label>
+    <button type="submit">Review change</button>
+  </form>
+</div>
+{% endblock %}

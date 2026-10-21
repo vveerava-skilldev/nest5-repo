@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "_paid_to.html" import paid_to %}
+{% block title %}My submissions — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>My submissions</h2>
+<p style="color:var(--muted)">Payments and expenses you recorded. A payment counts as soon as you submit it; the admin then verifies it, and if it can't be matched the admin rejects it (shown here as Rejected) and the due comes back. You can ask the admin to cancel one; it keeps counting until the admin approves.</p>
+{% include "_flash.html" %}
+<div class="card">
+  <table>
+    <thead><tr><th>Date</th><th>Type</th><th>Entry</th><th>Status</th><th>Cancel request</th></tr></thead>
+    <tbody>
+    {% for s in items %}
+      <tr>
+        <td>{{ s.when|format_date }}</td>
+        <td>{{ s.label }}</td>
+        <td>{{ s.summary }}{% set pr = s.record if (s.record and s.record.payee_vpa) else s.rejection %}{% if pr %}{{ paid_to(pr) }}{% endif %}</td>
+        <td>{% if s.live %}<span class="badge ok">Counted</span>{% elif s.rejection %}<span class="badge bad">Rejected</span>{% if s.rejection.reason %} <small style="color:var(--muted)">Reason: {{ s.rejection.reason }}</small>{% endif %}{% elif s.record and s.record.is_rejected %}<span class="badge bad">Rejected</span>{% if s.record.rejection_reason %} <small style="color:var(--muted)">{{ s.record.rejection_reason }}</small>{% endif %}{% else %}<span class="badge">Cancelled / removed</span>{% endif %}</td>
+        <td>
+          {% set req = s.request %}
+          {% if req and req.status == 'pending' %}<span class="badge warn">Cancel requested</span> {{ req.created_at|format_datetime }}
+          {% elif req and req.status == 'approved' %}<span class="badge ok">Cancel approved</span> {{ req.decided_at|format_datetime }}{% if req.decision_note %} — {{ req.decision_note }}{% endif %}
+          {% elif req and req.status == 'rejected' %}<span class="badge bad">Cancel rejected</span> {{ req.decided_at|format_datetime }}{% if req.decision_note %} — {{ req.decision_note }}{% endif %}
+          {% endif %}
+          {% if s.live and (not req or req.status != 'pending') %}
+          <details class="inline-details">
+            <summary>Request cancel</summary>
+            <form method="post" action="/owner/cancel-requests" class="inline">
+              <input type="hidden" name="record_type" value="{{ s.record_type }}">
+              <input type="hidden" name="record_id" value="{{ s.record.id }}">
+              <input type="hidden" name="back" value="/owner/submissions">
+              <input type="text" name="reason" placeholder="Reason (optional)">
+              <button type="submit" class="secondary">Send request</button>
+            </form>
+          </details>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" style="color:var(--muted)">You haven't recorded anything yet. Use the forms on Payments, Expenses or Corpus collections.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

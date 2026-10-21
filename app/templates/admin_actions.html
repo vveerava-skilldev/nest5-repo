@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Actions — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Actions {% if hub.total %}<span class="badge warn">{{ hub.total }}</span>{% endif %}</h2>
+{% include "_flash.html" %}
+{% if hub.total %}
+<p style="color:var(--muted)">Everything waiting for the admin, grouped. Each line links to the page where you resolve it.
+  Account Balance ₹{{ hub.balances.held }} · owed back to owners ₹{{ hub.balances.owed }}.</p>
+{% endif %}
+<div class="card">
+  {% with limit = 0 %}{% include "_actions_list.html" %}{% endwith %}
+</div>
+{% endblock %}

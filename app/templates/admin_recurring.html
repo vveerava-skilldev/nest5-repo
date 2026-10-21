@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Recurring tasks — {{ portal_name }}{% endblock %}
+{% block content %}
+<h2>Recurring tasks</h2>
+<p style="color:var(--muted)">Admin-only monthly to-dos (watchman salary, common EB bill, lift or generator checks). Each month's occurrence appears on the Calendar and the Actions board, and stays overdue until you mark it done. Marking done only records it here — it never creates an expense.</p>
+{% include "_flash.html" %}
+
+{% if occurrences %}
+<div class="card">
+  <h3 style="margin-top:0">This month and overdue</h3>
+  <ul class="rec-list">
+    {% for o in occurrences %}
+    {% set occ = o.occurrence %}
+    <li class="rec-item s-{{ o.status }}" id="occ-{{ occ.id }}">
+      <div class="rec-main">
+        <strong>{{ o.task.title }}</strong> <small>({{ '%02d'|format(occ.month) }}-{{ occ.year }})</small>
+        <div class="rec-meta">
+          {{ label(o.task) }} · due {{ occ.due_date|format_date }}
+          {% if o.status == 'overdue' %}<span class="badge bad">Overdue</span>
+          {% elif o.status == 'due_soon' %}<span class="badge warn">Due soon</span>
+          {% elif o.status == 'done' %}<span class="badge ok">Done {{ occ.done_on|format_date }}</span>{% endif %}
+          {% if occ.done_on and occ.amount is not none %}<span> · ₹{{ occ.amount }}</span>{% endif %}
+          {% if occ.done_on and occ.note %}<span> · {{ occ.note }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="rec-actions no-print">
+        {% if occ.done_on %}
+        <form method="post" action="/admin/recurring/occurrence/{{ occ.id }}/undo" class="inline" onsubmit="return confirm('Undo this done mark?')">
+          <button type="submit" class="secondary small">Undo</button>
+        </form>
+        {% else %}
+        <details class="inline-details">
+          <summary>Mark done</summary>
+          <form method="post" action="/admin/recurring/occurrence/{{ occ.id }}/done" class="rec-done-form">
+            <label>Done on<input type="date" name="done_on" value="{{ today.isoformat() }}" required></label>
+            <label>Amount ₹ (optional)<input type="text" name="amount" inputmode="numeric" autocomplete="off"></label>
+            <label>Note (optional)<input type="text" name="note" maxlength="255"></label>
+            <button type="submit">Save</button>
+          </form>
+        </details>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3 style="margin-top:0">All recurring tasks</h3>
+  {% for t in tasks %}
+  <div class="rec-task{% if not t.is_active %} off{% endif %}">
+    <div class="card-head">
+      <div><strong>{{ t.title }}</strong>
+        <div class="rec-meta">{{ repeat(t) }} · {{ label(t) }}{% if not t.is_active %} · <span class="badge">Disabled</span>{% endif %}</div>
+      </div>
+      <div class="no-print rec-actions">
+        <form method="post" action="/admin/recurring/tasks/{{ t.id }}/toggle" class="inline">
+          <button type="submit" class="secondary small">{{ 'Disable' if t.is_active else 'Enable' }}</button>
+        </form>
+        <details class="inline-details">
+          <summary>Edit</summary>
+          <form method="post" action="/admin/recurring/tasks/{{ t.id }}/edit" class="rec-form">
+            <label>Title<input name="title" value="{{ t.title }}" maxlength="200" required></label>
+            <label>Day of month<input name="day_of_month" type="number" min="1" max="31" value="{{ t.day_of_month }}" required></label>
+            <label>Wording<select name="due_mode"><option value="by"{% if t.due_mode == 'by' %} selected{% endif %}>by the day</option><option value="before"{% if t.due_mode == 'before' %} selected{% endif %}>before the day (due on it)</option></select></label>
+            <label>Repeat every (months)<input name="interval_months" type="number" min="1" max="12" value="{{ t.interval_months }}" required></label>
+            <label>Notes<input name="notes" value="{{ t.notes or '' }}"></label>
+            <button type="submit">Save</button>
+          </form>
+        </details>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card no-print">
+  <h3 style="margin-top:0">Add a recurring task</h3>
+  <form method="post" action="/admin/recurring/tasks" class="rec-form">
+    <label>Title<input name="title" maxlength="200" placeholder="e.g. Lift service check" required></label>
+    <label>Day of month<input name="day_of_month" type="number" min="1" max="31" value="1" required></label>
+    <label>Wording<select name="due_mode"><option value="by">by the day</option><option value="before">before the day (due on it)</option></select></label>
+    <label>Repeat every (months)<input name="interval_months" type="number" min="1" max="12" value="1" required></label>
+    <label>Notes (optional)<input name="notes"></label>
+    <button type="submit">Add task</button>
+  </form>
+  <p style="color:var(--muted);font-size:0.85rem">A day after the month's last day (e.g. 31) uses the last day of shorter months. A new task starts in the first month whose day has not passed.</p>
+</div>
+
+{% if done_rows %}
+<div class="card">
+  <h3 style="margin-top:0">Recently done</h3>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Task</th><th>Month</th><th>Done on</th><th>Recorded</th><th>Amount</th><th>Note</th><th>By</th></tr></thead>
+    <tbody>
+    {% for o in done_rows %}
+      <tr><td>{{ o.task.title }}</td><td>{{ '%02d'|format(o.month) }}-{{ o.year }}</td><td>{{ o.done_on|format_date }}</td><td>{{ o.done_at|format_datetime if o.done_at else '—' }}</td><td>{% if o.amount is not none %}₹{{ o.amount }}{% else %}—{% endif %}</td><td>{{ o.note or '—' }}</td><td>{{ o.done_by or '—' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

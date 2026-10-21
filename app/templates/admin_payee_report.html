@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Payee / UPI audit report — {{ portal_name }}{% endblock %}
+{% block content %}
+{% macro money(v) %}{% if v is none %}—{% else %}₹{{ v }}{% endif %}{% endmacro %}
+{% macro page_link(p) %}/admin/payee-report?{{ export_query }}{% if export_query %}&{% endif %}page={{ p }}{% endmacro %}
+<h2>Payee / UPI audit report</h2>
+<p style="color:var(--muted)">Which account each payment was made to, taken from the payee details saved on the payment itself (so later changes in Payment settings never rewrite it). Times are in IST. This page only reads; nothing here changes any record.</p>
+<p class="payee-covered"><strong>Covered:</strong> maintenance, corpus and project payments, and owner submissions that were rejected. <strong>Not covered:</strong> expenses and settlements (money paid out; they carry no payee). Payments recorded as cash, bank transfer or cheque, and dues not yet paid, are grouped as <em>{{ no_upi }}</em>.</p>
+
+<form method="get" action="/admin/payee-report" class="card no-print payee-filters">
+  <div class="payee-grid">
+    <label>UPI ID
+      <select name="vpa">
+        <option value="">Any</option>
+        <option value="{{ no_upi }}"{% if f.vpa == no_upi %} selected{% endif %}>{{ no_upi }}</option>
+        {% for v in d.vpas %}<option value="{{ v }}"{% if f.vpa == v %} selected{% endif %}>{{ v }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>…or UPI ID contains<input name="vpa_text" value="{{ f.vpa_text }}" maxlength="120" autocapitalize="none" autocomplete="off" placeholder="type part of an ID"></label>
+    <label>Mobile<input name="mobile" value="{{ f.mobile }}" maxlength="20" inputmode="tel" autocomplete="off"></label>
+    <label>Payee name<input name="payee" value="{{ f.payee }}" maxlength="100"></label>
+    <label>Settings version
+      <select name="version">
+        <option value="">Any</option>
+        {% for h in d.history|reverse %}<option value="{{ h.id }}"{% if f.version == h.id %} selected{% endif %}>#{{ h.id }} — {{ h.new_upi_vpa }} ({{ h.changed_at|ist }}){% if h.is_initial %} initial{% endif %}</option>{% endfor %}
+      </select>
+    </label>
+    <label>From<input type="date" name="date_from" value="{{ f.date_from.isoformat() if f.date_from else '' }}"></label>
+    <label>To<input type="date" name="date_to" value="{{ f.date_to.isoformat() if f.date_to else '' }}"></label>
+    <label>Type
+      <select name="type">
+        <option value="all">All types</option>
+        {% for k, label in types.items() %}<option value="{{ k }}"{% if f.type == k %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Mode
+      <select name="mode">
+        <option value="all">All modes</option>
+        {% for m in modes %}<option value="{{ m }}"{% if f.mode == m %} selected{% endif %}>{{ 'No mode recorded' if m == 'none' else m }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        {% for k, label in statuses.items() %}<option value="{{ k }}"{% if f.status == k %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Flat
+      <select name="flat">
+        <option value="">All flats</option>
+        {% for fl in d.flats %}<option value="{{ fl.id }}"{% if f.flat == fl.id %} selected{% endif %}>{{ fl.number }}{% if fl.contact_name %} — {{ fl.contact_name }}{% endif %}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="payee-check"><input type="checkbox" name="include" value="1"{% if f.include %} checked{% endif %}> Include rejected and reverted rows in totals</label>
+  </div>
+  <p><button type="submit">Apply filters</button> <a class="secondary-link" href="/admin/payee-report">Clear</a></p>
+</form>
+
+<div class="card payee-summary">
+  <h3 style="margin-top:0">Summary</h3>
+  <p><strong id="payee-total">₹{{ d.summary.total }}</strong> received in <strong id="payee-count">{{ d.summary.count }}</strong> counted payment{{ '' if d.summary.count == 1 else 's' }}.
+    {% if f.include %}Rejected and reverted rows are included in this total.
+    {% elif d.summary.excluded %}{{ d.summary.excluded }} rejected or reverted row{{ '' if d.summary.excluded == 1 else 's' }} shown below but not counted.{% endif %}</p>
+  {% if d.summary.by_payee %}
+  <h4>By payee account</h4>
+  <div class="table-scroll">
+  <table class="payee-by">
+    <thead><tr><th>Paid to</th><th>Counted</th><th>Total received</th><th>Not counted</th></tr></thead>
+    <tbody>
+    {% for g in d.summary.by_payee %}
+      <tr><td>{{ g.payee }}</td><td>{{ g.count }}</td><td>₹{{ g.total }}</td><td>{% if g.excluded %}{{ g.excluded }} (₹{{ g.excluded_total }}){% else %}—{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if d.summary.periods %}
+  <h4>By settings period, next to the balance recorded then</h4>
+  <ul class="payee-periods">
+    {% for p in d.summary.periods|reverse %}
+    <li>
+      <strong>Under UPI {{ p.vpa }}</strong> ({{ p.payee }}, {{ p.mobile }}) — settings #{{ p.id }}, from {{ p.from|ist }} to {{ p.to|ist if p.to else 'now' }}:
+      <strong>₹{{ p.upi_total }}</strong> received by UPI in {{ p.upi_count }} payment{{ '' if p.upi_count == 1 else 's' }}{% if p.other_count %}; ₹{{ p.other_total }} recorded as cash / bank in {{ p.other_count }}{% endif %}.
+      <br><small>Account Balance when set: {{ money(p.fund_at_start) }}
+        · at the next change: {{ money(p.fund_at_end) if p.to else 'still open' }}
+        · Total balance when set: {{ money(p.total_at_start) }}{% if p.bank_entered %} · Bank balance typed: {{ p.bank_entered }}{% endif %}</small>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="payee-head">
+    <h3 style="margin:0">Payments <small>({{ d.rows|length }} row{{ '' if d.rows|length == 1 else 's' }})</small></h3>
+    <span class="no-print payee-exports">
+      Export this view:
+      <a class="chip" href="/admin/payee-report/export.csv{{ '?' ~ export_query if export_query }}">CSV</a>
+      <a class="chip" href="/admin/payee-report/export.xlsx{{ '?' ~ export_query if export_query }}">Excel</a>
+      <a class="chip" href="/admin/payee-report/export.pdf{{ '?' ~ export_query if export_query }}">PDF</a>
+    </span>
+  </div>
+  {% if d.rows %}
+  <div class="table-scroll payee-table">
+    <table>
+      <thead><tr><th>Date</th><th>Flat / owner</th><th>Type</th><th>Amount</th><th>Mode</th><th>UTR / reference</th><th>Status</th><th>Paid to</th><th>Version</th><th>Entered by</th></tr></thead>
+      <tbody>
+      {% for r in d.page_rows %}
+        <tr class="payee-row {{ 'payee-excluded' if r.status in ('rejected', 'reverted') }}">
+          <td>{{ r.date|format_date }}</td>
+          <td>{{ r.flat }} <small>{{ r.owner }}</small></td>
+          <td>{{ r.type_label }}<br><small>{{ r.detail }}</small></td>
+          <td>₹{{ r.amount }}</td>
+          <td>{{ r.mode or '—' }}</td>
+          <td>{{ r.ref or '—' }}</td>
+          <td>{% if r.status == 'paid' %}<span class="badge ok">Paid</span>{% elif r.status == 'pending' %}<span class="badge warn">Pending</span>{% else %}<span class="badge bad">{{ r.status|title }}</span><br><small>not counted{% if r.reason %}: {{ r.reason }}{% endif %}</small>{% endif %}</td>
+          <td>{% if r.vpa %}{{ r.vpa }}<br><small>{{ r.mobile }} · {{ r.payee }}</small>{% else %}{{ no_upi }}{% endif %}</td>
+          <td>{{ ('#' ~ r.version) if r.version else '—' }}</td>
+          <td><small>{{ r.by }}</small></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="payee-cards">
+    {% for r in d.page_rows %}
+    <article class="payee-card {{ 'payee-excluded' if r.status in ('rejected', 'reverted') }}">
+      <header class="card-head">
+        <strong>₹{{ r.amount }}</strong>
+        {% if r.status == 'paid' %}<span class="badge ok">Paid</span>{% elif r.status == 'pending' %}<span class="badge warn">Pending</span>{% else %}<span class="badge bad">{{ r.status|title }} · not counted</span>{% endif %}
+      </header>
+      <p class="payee-line">{{ r.date|format_date }} · Flat {{ r.flat }} <small>{{ r.owner }}</small></p>
+      <p class="payee-line">{{ r.type_label }} — {{ r.detail }}</p>
+      <p class="payee-line">{{ r.mode or 'No mode' }}{% if r.ref %} · {{ r.ref }}{% endif %}</p>
+      <p class="payee-line">To: {% if r.vpa %}{{ r.vpa }} <small>{{ r.mobile }} · {{ r.payee }}</small>{% else %}{{ no_upi }}{% endif %}{% if r.version %} <small>(settings #{{ r.version }})</small>{% endif %}</p>
+      <p class="payee-line"><small>{{ r.by }}{% if r.reason %} · {{ r.reason }}{% endif %}</small></p>
+    </article>
+    {% endfor %}
+  </div>
+  <div class="activity-pager no-print">
+    {% if d.page > 1 %}<a class="chip" href="{{ page_link(d.page - 1) }}">← Previous</a>{% endif %}
+    <span class="activity-count">Page {{ d.page }} of {{ d.pages }}</span>
+    {% if d.page < d.pages %}<a class="chip" href="{{ page_link(d.page + 1) }}">Next →</a>{% endif %}
+  </div>
+  {% else %}
+  <p class="activity-empty" id="payee-empty">No payments match these filters{% if not export_query %} yet{% endif %}.</p>
+  {% endif %}
+</div>
+{% endblock %}
